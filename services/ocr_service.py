@@ -261,34 +261,30 @@ class OCRService:
             else:
                 image_url = image_base64
             
-            logger.info(f"Analyzing {document_type} document with OpenAI Vision")
+            logger.info(f"Analyzing {document_type} document with OpenAI Responses API")
             
-            # Call OpenAI Vision API
-            response = self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
+            # Call OpenAI Responses API (direct, no Emergent proxy)
+            response = self.client.responses.create(
+                model="gpt-4.1-mini",
+                input=[
                     {
                         "role": "user",
                         "content": [
                             {
-                                "type": "text",
+                                "type": "input_text",
                                 "text": prompt
                             },
                             {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": image_url,
-                                    "detail": "high"
-                                }
+                                "type": "input_image",
+                                "image_url": image_url
                             }
                         ]
                     }
-                ],
-                max_tokens=4096
+                ]
             )
             
-            # Extract response
-            raw_response = response.choices[0].message.content
+            # Extract response using Responses API output_text
+            raw_response = (response.output_text or "").strip()
             logger.info(f"OCR Response received: {len(raw_response)} characters")
             
             # Clean and parse JSON
