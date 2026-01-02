@@ -1,6 +1,8 @@
 """
 OCR Service for AeroLogix AI
-Uses OpenAI Vision (GPT-4o) via Emergent LLM Key
+Uses OpenAI Vision directly via Responses API
+Note: OCR uses OpenAI directly (no Emergent proxy)
+      EKO continues to use Emergent separately
 """
 
 import os
@@ -16,12 +18,10 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client with Emergent LLM Key
-EMERGENT_LLM_KEY = os.getenv("EMERGENT_LLM_KEY", "sk-emergent-eAf207608993771Ad9")
-
+# Initialize OpenAI client directly for OCR (no Emergent proxy)
+# Uses OPENAI_API_KEY from environment
 client = OpenAI(
-    api_key=EMERGENT_LLM_KEY,
-    base_url="https://integrations.emergentagent.com/llm/openai/v1",
+    api_key=os.getenv("OPENAI_API_KEY"),
     timeout=60.0  # 60 second timeout to prevent hanging
 )
 
