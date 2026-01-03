@@ -655,17 +655,21 @@ async def apply_ocr_results(
     is_maintenance_report = document_type == "maintenance_report"
     is_invoice = document_type == "invoice"
     
+    # Debug logging for troubleshooting
+    logger.info(f"Apply OCR scan {scan_id}: document_type={document_type}, is_maintenance_report={is_maintenance_report}, update_aircraft_hours={update_aircraft_hours}")
+    logger.info(f"Extracted hours: airframe={extracted_data.get('airframe_hours')}, engine={extracted_data.get('engine_hours')}, propeller={extracted_data.get('propeller_hours')}")
+    
     try:
         # ===== RÈGLE MÉTIER: Seul "Rapport" peut créer maintenance/pièces =====
         
         # 1. Update aircraft hours if provided (ONLY FOR RAPPORT)
         if is_maintenance_report and update_aircraft_hours:
             hours_update = {}
-            if extracted_data.get("airframe_hours"):
+            if extracted_data.get("airframe_hours") is not None:
                 hours_update["airframe_hours"] = extracted_data["airframe_hours"]
-            if extracted_data.get("engine_hours"):
+            if extracted_data.get("engine_hours") is not None:
                 hours_update["engine_hours"] = extracted_data["engine_hours"]
-            if extracted_data.get("propeller_hours"):
+            if extracted_data.get("propeller_hours") is not None:
                 hours_update["propeller_hours"] = extracted_data["propeller_hours"]
             
             if hours_update:
@@ -674,7 +678,9 @@ async def apply_ocr_results(
                     {"_id": aircraft_id},
                     {"$set": hours_update}
                 )
-                logger.info(f"Updated aircraft {aircraft_id} hours: {hours_update}")
+                logger.info(f"✅ Updated aircraft {aircraft_id} hours: {hours_update}")
+            else:
+                logger.warning(f"⚠️ No hours to update for aircraft {aircraft_id} - extracted values were None or empty")
         
         # 2. Create maintenance record (ONLY FOR RAPPORT)
         if is_maintenance_report and (extracted_data.get("description") or extracted_data.get("work_order_number")):
