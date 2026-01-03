@@ -1221,6 +1221,11 @@ async def apply_ocr_results(
             }
         )
         
+        # TC-SAFE: Log APPLY SUMMARY for debug
+        report_parts_count = len(extracted_data.get("parts_replaced", [])) if is_maintenance_report else 0
+        invoice_parts_count = len(extracted_data.get("parts", []) + extracted_data.get("parts_replaced", [])) if is_invoice else 0
+        logger.info(f"OCR APPLY SUMMARY | scan_id={scan_id} | doc_type={document_type} | report_parts={report_parts_count} | invoice_parts={invoice_parts_count} | parts_created={len(applied_ids['part_ids'])} | invoice_created={invoice_created}")
+        
         return {
             "message": "OCR results applied successfully",
             "applied": {
