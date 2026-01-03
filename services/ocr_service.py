@@ -26,135 +26,89 @@ client = OpenAI(
 )
 
 # Prompts spécialisés par type de document
-MAINTENANCE_REPORT_PROMPT = """You are an aviation maintenance expert. Analyze this maintenance report image and extract ALL structured information.
+MAINTENANCE_REPORT_PROMPT = """You are an aviation maintenance document analysis assistant.
 
-IMPORTANT: Respond ONLY with valid JSON, no text before or after.
+The user provides an image of an aircraft maintenance report
+(e.g. annual inspection, scheduled maintenance, AME/AMO report).
 
-CRITICAL RULES FOR NUMBERS:
-- Spaces or commas may be thousands separators (e.g., "6 344.6" = 6344.6, "6,344.6" = 6344.6)
-- Decimal point is always "." (e.g., 6344.6)
-- Be very careful not to reverse digits
-- If uncertain about a number, read it multiple times carefully
+IMPORTANT RULES (MANDATORY):
+- Do NOT invent or guess any value.
+- If information is unclear, unreadable, or missing, return null.
+- Do NOT infer compliance, airworthiness, or safety status.
+- Do NOT calculate or extrapolate hours.
+- Extract only what is EXPLICITLY written in the document.
+- Dates must be returned as ISO format YYYY-MM-DD if readable.
+- Numbers may use spaces or commas (e.g. "6 344,6"); return them as numbers.
+- This data is informational and must be validated by the user.
 
-COMPONENT KEYWORDS TO DETECT (ENGLISH):
-- PROPELLER/PROP: PROPELLER, PROP, HARTZELL, MCCAULEY, SENSENICH, FIXED PITCH, VARIABLE PITCH, CONSTANT SPEED
-- MAGNETO: MAGNETO, MAGNETOS, SLICK, BENDIX, IMPULSE COUPLING
-- AVIONICS 24 MONTHS: 24 MONTH, ALTIMETER, PITOT, STATIC, PITOT-STATIC, TRANSPONDER, ENCODER, IFR CERTIFICATION
-- VACUUM PUMP: VACUUM PUMP, DRY AIR PUMP, GYRO INSTRUMENTS
+OUTPUT FORMAT:
+Return a SINGLE valid JSON object following EXACTLY this structure.
 
-Expected JSON structure:
 {
-    "date": "YYYY-MM-DD or null",
-    "ame_name": "Mechanic/AME name or null",
-    "amo_name": "Maintenance organization/AMO name or null",
-    "ame_license": "AME license number or null",
-    "work_order_number": "Work Order number or null",
-    "description": "Complete description of work performed",
-    "airframe_hours": decimal number or null,
-    "engine_hours": decimal number or null,
-    "propeller_hours": decimal number or null,
-    "remarks": "Additional remarks or null",
-    "labor_cost": number or null,
-    "parts_cost": number or null,
-    "total_cost": number or null,
-    "component_work": {
-        "propeller": {
-            "detected": true/false,
-            "type": "fixed or variable or null",
-            "manufacturer": "HARTZELL, MCCAULEY, SENSENICH, etc. or null",
-            "model": "model or null",
-            "work_type": "INSPECTION, OVERHAUL, REPAIR or null",
-            "hours_since_work": number or null,
-            "work_date": "YYYY-MM-DD or null"
-        },
-        "magnetos": {
-            "detected": true/false,
-            "manufacturer": "SLICK, BENDIX, etc. or null",
-            "model": "model or null",
-            "work_type": "500H INSPECTION, OVERHAUL, TIMING or null",
-            "hours_since_work": number or null,
-            "work_date": "YYYY-MM-DD or null"
-        },
-        "avionics_certification": {
-            "detected": true/false,
-            "type": "ALTIMETER, PITOT-STATIC, TRANSPONDER or null",
-            "certification_date": "YYYY-MM-DD or null",
-            "next_due_date": "YYYY-MM-DD or null",
-            "status": "CURRENT, DUE, PAST_DUE or null (detect from text: PAST DUE, DUE, OVERDUE)"
-        },
-        "vacuum_pump": {
-            "detected": true/false,
-            "manufacturer": "manufacturer or null",
-            "model": "model or null",
-            "work_type": "REPLACEMENT, INSPECTION or null",
-            "hours_since_work": number or null,
-            "work_date": "YYYY-MM-DD or null"
-        },
-        "engine": {
-            "detected": true/false,
-            "model": "engine model or null",
-            "work_type": "OVERHAUL, TOP OVERHAUL, INSPECTION or null",
-            "hours_since_work": number or null,
-            "work_date": "YYYY-MM-DD or null"
-        }
-    },
-    "ad_sb_references": [
-        {
-            "adsb_type": "AD or SB",
-            "reference_number": "e.g., AD 2024-05-12",
-            "status": "COMPLIED, PENDING or UNKNOWN",
-            "compliance_date": "YYYY-MM-DD or null",
-            "airframe_hours": number or null,
-            "engine_hours": number or null,
-            "propeller_hours": number or null,
-            "description": "Description or null"
-        }
-    ],
-    "parts_replaced": [
-        {
-            "part_number": "P/N",
-            "name": "Part name",
-            "serial_number": "S/N or null",
-            "quantity": integer,
-            "price": number or null,
-            "supplier": "Supplier or null"
-        }
-    ],
-    "stc_references": [
-        {
-            "stc_number": "STC number",
-            "title": "Title or null",
-            "description": "Description or null",
-            "installation_date": "YYYY-MM-DD or null"
-        }
-    ],
-    "elt_data": {
-        "detected": true/false,
-        "brand": "Artex, Kannad, ACK, etc. or null",
-        "model": "ELT model or null",
-        "serial_number": "ELT serial number or null",
-        "installation_date": "YYYY-MM-DD or null",
-        "certification_date": "YYYY-MM-DD or null",
-        "battery_expiry_date": "YYYY-MM-DD or null",
-        "battery_install_date": "YYYY-MM-DD or null",
-        "battery_interval_months": number or null,
-        "beacon_hex_id": "Beacon hex ID or null"
+  "document_type": "maintenance_report",
+
+  "report_date": string | null,
+  "amo_name": string | null,
+  "ame_name": string | null,
+  "ame_license": string | null,
+  "work_order_number": string | null,
+
+  "airframe_hours": number | null,
+  "engine_hours": number | null,
+  "propeller_hours": number | null,
+
+  "work_performed": string | null,
+
+  "limitations_or_notes": [
+    {
+      "text": string,
+      "confidence": number
     }
+  ],
+
+  "parts_replaced": [
+    {
+      "part_number": string | null,
+      "description": string | null,
+      "quantity": number | null,
+      "unit_price": number | null,
+      "confidence": number
+    }
+  ],
+
+  "ad_sb_references": [
+    {
+      "reference_number": string | null,
+      "description": string | null,
+      "confidence": number
+    }
+  ],
+
+  "stc_references": [
+    {
+      "stc_number": string | null,
+      "description": string | null,
+      "confidence": number
+    }
+  ],
+
+  "elt_data": {
+    "elt_type": string | null,
+    "elt_frequency": string | null,
+    "battery_expiry": string | null,
+    "confidence": number
+  }
 }
 
-IMPORTANT RULES:
-1. Detect ALL AD (Airworthiness Directive) references - typical format: AD XXXX-XX-XX
-2. Detect ALL SB (Service Bulletin) references - typical format: SB XX-XXXX
-3. For each AD/SB, determine status: COMPLIED if clearly indicated as done, PENDING if to be done, UNKNOWN otherwise
-4. Extract airframe (airframe), engine (engine) and propeller (propeller) hours if mentioned
-5. Identify all replaced parts with their P/N
-6. If information is not found, use null
-7. ELT DETECTION: Look for any mention of "ELT", "Emergency Locator Transmitter"
-   - Common brands: Artex, Kannad, ACK, Ameri-King, ACR
-8. COMPONENT WORK: Actively look for work on propeller, magnetos, avionics, vacuum pump, engine
-   - Set detected=true only if clearly mentioned in the document
+CONFIDENCE:
+- confidence must be a number between 0.0 and 1.0
+- Use lower confidence if text is faint, partial, or inferred from context
+- If a field is returned as null, omit confidence for that field
 
-Analyze the image now:"""
+FINAL CHECK:
+- Return ONLY valid JSON
+- Do NOT include explanations or comments
+"""
 
 STC_PROMPT = """Tu es un expert en certification aéronautique. Analyse cette image d'un document STC (Supplemental Type Certificate) et extrait les informations structurées.
 
