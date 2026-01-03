@@ -1082,7 +1082,47 @@ async def apply_ocr_results(
             
             # TC-SAFE: Créer facture si au moins un coût existe
             has_any_cost = invoice_total or parts_cost or labor_cost
-            invoice_parts = extracted_data.get("parts", []) + extracted_data.get("parts_replaced", [])
+            raw_invoice_parts = extracted_data.get("parts", []) + extracted_data.get("parts_replaced", [])
+            
+            # DEDUPLICATION: Normalize and deduplicate parts using composite key
+            def normalize_part(part):
+                """Normalize part data for deduplication"""
+                return {
+                    "part_number": part.get("part_number") or part.get("numero_piece") or part.get("numéro_pièce"),
+                    "description": part.get("description") or part.get("name") or part.get("nom"),
+                    "name": part.get("name") or part.get("description") or part.get("nom"),
+                    "serial_number": part.get("serial_number") or part.get("numero_serie") or part.get("numéro_série"),
+                    "quantity": part.get("quantity") or part.get("quantité") or part.get("quantite"),
+                    "unit_price": part.get("unit_price") or part.get("prix_unitaire") or part.get("price") or part.get("prix"),
+                    "price": part.get("price") or part.get("prix") or part.get("unit_price") or part.get("prix_unitaire"),
+                    "line_total": part.get("line_total") or part.get("total_ligne"),
+                    "manufacturer": part.get("manufacturer") or part.get("fabricant"),
+                }
+            
+            def get_dedup_key(part):
+                """Create composite key for deduplication: part_number + quantity + unit_price"""
+                pn = str(part.get("part_number") or part.get("description") or "").strip().lower()
+                qty = str(part.get("quantity") or "").strip()
+                price = str(part.get("unit_price") or part.get("price") or "").strip()
+                return f"{pn}|{qty}|{price}"
+            
+            # Normalize all parts
+            normalized_parts = [normalize_part(p) for p in raw_invoice_parts if p]
+            
+            # Deduplicate using composite key
+            seen_keys = set()
+            invoice_parts = []
+            for part in normalized_parts:
+                key = get_dedup_key(part)
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    invoice_parts.append(part)
+            
+            # PART DEDUP log
+            before_count = len(raw_invoice_parts)
+            after_count = len(invoice_parts)
+            logger.info(f"PART DEDUP | before={before_count} after={after_count}")
+            
             has_parts = len(invoice_parts) > 0
             
             if has_any_cost or has_parts:
