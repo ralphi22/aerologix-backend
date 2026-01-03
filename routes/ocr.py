@@ -1157,6 +1157,13 @@ async def apply_ocr_results(
             else:
                 logger.warning(f"⚠️ No invoice created: no cost data and no parts found")
             
+            # OCR DEBUG: Log invoice creation status with details
+            logger.info(
+                f"OCR DEBUG invoice created={invoice_created} "
+                f"invoice_number={extracted_data.get('invoice_number')} "
+                f"total={extracted_data.get('total')}"
+            )
+            
             # 8. Créer les part_records pour les pièces de la facture
             # OCR DEBUG: Log parts payload before processing (facture)
             logger.info(
