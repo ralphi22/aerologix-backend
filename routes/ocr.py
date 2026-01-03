@@ -643,6 +643,13 @@ async def apply_ocr_results(
     aircraft_id = scan["aircraft_id"]
     now = datetime.utcnow()
     
+    # OCR DEBUG: Log extracted_data structure for troubleshooting
+    document_type = scan.get("document_type", "maintenance_report")
+    logger.info(
+        f"OCR DEBUG extracted_data keys={list(extracted_data.keys())} "
+        f"doc_type={document_type}"
+    )
+    
     applied_ids = {
         "maintenance_id": None,
         "adsb_ids": [],
