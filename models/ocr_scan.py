@@ -30,10 +30,11 @@ class ExtractedADSB(BaseModel):
 
 class ExtractedPart(BaseModel):
     """Part detected in OCR scan"""
-    part_number: str
+    # Made optional to accept OCR reports where info may be illegible
+    part_number: Optional[str] = None
     name: Optional[str] = None
     serial_number: Optional[str] = None
-    quantity: int = 1
+    quantity: Optional[int] = None  # No default - user validates manually
     price: Optional[float] = None
     supplier: Optional[str] = None
 
