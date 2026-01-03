@@ -221,7 +221,9 @@ class OCRService:
         """
         # Mapping des clés françaises vers anglaises
         KEY_MAPPING = {
-            # Invoice keys (FR -> EN)
+            # ========== INVOICE KEYS (FR -> EN) ==========
+            # CRITICAL: "date" alone must map to "invoice_date" for invoices
+            "date": "invoice_date",
             "numéro_de_facture": "invoice_number",
             "numero_de_facture": "invoice_number",
             "numéro_facture": "invoice_number",
@@ -234,15 +236,16 @@ class OCRService:
             "total_facture": "total",
             "montant_total": "total",
             "devise": "currency",
-            "pièces_remplacées": "parts_replaced",
-            "pieces_remplacees": "parts_replaced",
+            # CRITICAL: pièces_remplacées -> "parts" (not parts_replaced) for invoices
+            "pièces_remplacées": "parts",
+            "pieces_remplacees": "parts",
             "pièces": "parts",
             "pieces": "parts",
             "références_ad_sb": "ad_sb_references",
             "references_ad_sb": "ad_sb_references",
             "références_stc": "stc_references",
             "references_stc": "stc_references",
-            # Maintenance report keys (FR -> EN)
+            # ========== MAINTENANCE REPORT KEYS (FR -> EN) ==========
             "date_rapport": "report_date",
             "heures_cellule": "airframe_hours",
             "heures_moteur": "engine_hours",
@@ -263,7 +266,7 @@ class OCRService:
             "cout_pieces": "parts_cost",
             "remarques": "remarks",
             "limitations": "limitations_or_notes",
-            # Part keys (FR -> EN)
+            # ========== PART KEYS (FR -> EN) ==========
             "numéro_pièce": "part_number",
             "numero_piece": "part_number",
             "numéro_série": "serial_number",
@@ -274,6 +277,7 @@ class OCRService:
             "prix": "price",
             "total_ligne": "line_total",
             "nom": "name",
+            "description": "description",
             "fabricant": "manufacturer",
         }
         
@@ -284,7 +288,7 @@ class OCRService:
             
             normalized = {}
             for key, value in d.items():
-                # Normalize key (lowercase, handle accents)
+                # Normalize key using mapping (keep original if not in mapping)
                 normalized_key = KEY_MAPPING.get(key, key)
                 
                 # Recursively normalize nested structures
