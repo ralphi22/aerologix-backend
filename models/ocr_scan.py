@@ -34,7 +34,7 @@ class ExtractedPart(BaseModel):
     part_number: Optional[str] = None
     name: Optional[str] = None
     serial_number: Optional[str] = None
-    quantity: Optional[int] = None  # No default - user validates manually
+    quantity: Optional[float] = None  # Float to accept OCR values like 41.5
     price: Optional[float] = None
     supplier: Optional[str] = None
 
