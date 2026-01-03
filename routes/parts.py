@@ -234,7 +234,7 @@ async def delete_part_record(
     current_user: User = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """Delete a part record - AVIATION SAFE: only OCR parts can be deleted"""
+    """Delete a part record - AVIATION SAFE: only OCR/invoice parts can be deleted"""
     
     # Try to convert to ObjectId if it's a valid format, otherwise use string
     try:
@@ -254,16 +254,19 @@ async def delete_part_record(
             detail="Part record not found"
         )
     
-    # AVIATION SAFETY RULE: Only OCR parts can be deleted (manual parts are protected)
+    # AVIATION SAFETY RULE: Only OCR/invoice parts can be deleted (manual parts are protected)
     source = record.get("source", "manual")
     
-    if source != "ocr":
+    if source not in ["ocr", "ocr_invoice"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Suppression interdite — Les pièces saisies manuellement ne peuvent pas être supprimées."
         )
     
-    # Safe to delete - OCR source
+    # Get aircraft_id for logging before deletion
+    aircraft_id = record.get("aircraft_id")
+    
+    # Safe to delete - OCR/invoice source - DELETE ONLY THIS SPECIFIC RECORD
     result = await db.part_records.delete_one({
         "_id": query_id,
         "user_id": current_user.id
@@ -274,6 +277,9 @@ async def delete_part_record(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Part record not found"
         )
+    
+    # PART DELETE log
+    logger.info(f"PART DELETE | part_id={record_id} | aircraft_id={aircraft_id}")
     
     return {"message": "Part record deleted successfully"}
 
