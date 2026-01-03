@@ -826,6 +826,11 @@ async def apply_ocr_results(
         
         # 4. Create/Link part records (ONLY FOR RAPPORT) with deduplication
         if is_maintenance_report:
+            # OCR DEBUG: Log parts payload before processing (rapport)
+            logger.info(
+                f"OCR DEBUG maintenance parts payload={extracted_data.get('parts_replaced')}"
+            )
+            
             parts_selections = {s.index: s for s in (selections.parts or [])} if selections else {}
             
             for idx, part in enumerate(extracted_data.get("parts_replaced", [])):
