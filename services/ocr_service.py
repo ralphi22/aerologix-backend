@@ -130,33 +130,57 @@ Structure JSON attendue:
 
 Analyse l'image maintenant:"""
 
-INVOICE_PROMPT = """Tu es un expert en pièces aéronautiques. Analyse cette image de facture/bon de commande et extrait les informations sur les pièces.
+INVOICE_PROMPT = """You are an aviation maintenance invoice analysis assistant.
 
-IMPORTANT: Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après.
+The user provides an image of an aircraft maintenance invoice.
 
-Structure JSON attendue:
+IMPORTANT RULES (MANDATORY):
+- Do NOT invent or guess any value.
+- If information is unclear, unreadable, or missing, return null.
+- Do NOT assume parts are installed on the aircraft.
+- Do NOT infer labor rates or quantities.
+- Extract only what is explicitly written on the invoice.
+- Dates must be returned as ISO format YYYY-MM-DD if readable.
+- Numbers may use spaces or commas (e.g. "6 083,17"); return them as numbers.
+- This data is informational and must be validated by the user.
+
+OUTPUT FORMAT:
+Return a SINGLE valid JSON object following EXACTLY this structure.
+
 {
-    "invoice_number": "Numéro de facture ou null",
-    "invoice_date": "YYYY-MM-DD ou null",
-    "supplier": "Nom du fournisseur",
-    "parts": [
-        {
-            "part_number": "P/N (numéro de pièce)",
-            "name": "Nom/description de la pièce",
-            "serial_number": "S/N ou null",
-            "quantity": nombre,
-            "unit_price": nombre ou null,
-            "total_price": nombre ou null,
-            "manufacturer": "Fabricant ou null"
-        }
-    ],
-    "subtotal": nombre ou null,
-    "tax": nombre ou null,
-    "total": nombre ou null,
-    "currency": "USD, CAD, EUR, etc."
+  "document_type": "invoice",
+
+  "invoice_number": string | null,
+  "invoice_date": string | null,
+  "vendor_name": string | null,
+
+  "labor_hours": number | null,
+  "labor_cost": number | null,
+
+  "parts_cost": number | null,
+  "total_cost": number | null,
+
+  "parts_replaced": [
+    {
+      "part_number": string | null,
+      "description": string | null,
+      "quantity": number | null,
+      "unit_price": number | null,
+      "line_total": number | null,
+      "confidence": number
+    }
+  ]
 }
 
-Analyse l'image maintenant:"""
+CONFIDENCE:
+- confidence must be a number between 0.0 and 1.0
+- Use lower confidence if text is faint, partial, or ambiguous
+- If a field is returned as null, omit confidence for that field
+
+FINAL CHECK:
+- Return ONLY valid JSON
+- Do NOT include explanations or comments
+"""
 
 
 class OCRService:
