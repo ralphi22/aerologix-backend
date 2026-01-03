@@ -17,6 +17,39 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/parts", tags=["parts"])
 
 
+@router.get("/{aircraft_id}", response_model=List[dict])
+async def get_parts_by_aircraft(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """Get all parts for an aircraft (frontend route)"""
+    
+    # Verify aircraft belongs to user
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        # Return empty list instead of 404 for frontend compatibility
+        return []
+    
+    # Get parts sorted by created_at desc
+    cursor = db.part_records.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id
+    }).sort("created_at", -1)
+    
+    records = []
+    async for record in cursor:
+        record["_id"] = str(record["_id"])
+        records.append(record)
+    
+    logger.info(f"GET /api/parts/{aircraft_id} returned {len(records)} parts")
+    return records
+
+
 @router.post("", response_model=dict)
 async def create_part_record(
     record: PartRecordCreate,
