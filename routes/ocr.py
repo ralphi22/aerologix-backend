@@ -1041,18 +1041,29 @@ async def apply_ocr_results(
         invoice_created = False
         if is_invoice:
             # Préparer les données de la facture
-            invoice_total = extracted_data.get("total")
+            invoice_total = extracted_data.get("total") or extracted_data.get("total_cost")
             invoice_date = None
-            if extracted_data.get("invoice_date"):
+            if extracted_data.get("invoice_date") or extracted_data.get("date"):
                 try:
-                    invoice_date = datetime.fromisoformat(extracted_data["invoice_date"])
+                    date_str = extracted_data.get("invoice_date") or extracted_data.get("date")
+                    invoice_date = datetime.fromisoformat(date_str)
                 except:
                     pass
             
             # DÉDUPLICATION: vérifier si une facture similaire existe déjà
             existing_invoice = None
-            if invoice_total and invoice_date:
-                # Chercher une facture avec même avion, même date, même montant
+            invoice_number = extracted_data.get("invoice_number")
+            
+            # Chercher par invoice_number d'abord (plus fiable)
+            if invoice_number:
+                existing_invoice = await db.invoices.find_one({
+                    "aircraft_id": aircraft_id,
+                    "user_id": current_user.id,
+                    "invoice_number": invoice_number
+                })
+            
+            # Sinon chercher par date + montant
+            if not existing_invoice and invoice_total and invoice_date:
                 existing_invoice = await db.invoices.find_one({
                     "aircraft_id": aircraft_id,
                     "user_id": current_user.id,
@@ -1064,7 +1075,7 @@ async def apply_ocr_results(
                 # Facture similaire existe - mettre à jour au lieu de créer
                 update_fields = {
                     "updated_at": now,
-                    "invoice_number": extracted_data.get("invoice_number") or existing_invoice.get("invoice_number"),
+                    "invoice_number": invoice_number or existing_invoice.get("invoice_number"),
                     "supplier": extracted_data.get("supplier") or existing_invoice.get("supplier"),
                 }
                 await db.invoices.update_one(
@@ -1075,12 +1086,15 @@ async def apply_ocr_results(
                 invoice_created = True
                 logger.info(f"Updated existing invoice {existing_invoice['_id']} for aircraft {aircraft_id} (deduplication)")
             else:
-                # Créer nouvelle facture (SANS créer de pièces!)
+                # Créer nouvelle facture
+                # Collecter les pièces depuis les deux champs possibles
+                invoice_parts = extracted_data.get("parts", []) + extracted_data.get("parts_replaced", [])
+                
                 invoice_doc = {
                     "user_id": current_user.id,
                     "aircraft_id": aircraft_id,
-                    "invoice_number": extracted_data.get("invoice_number"),
-                    "invoice_date": invoice_date,
+                    "invoice_number": invoice_number,
+                    "invoice_date": invoice_date or now,
                     "supplier": extracted_data.get("supplier"),
                     "subtotal": extracted_data.get("subtotal"),
                     "tax": extracted_data.get("tax"),
@@ -1088,8 +1102,7 @@ async def apply_ocr_results(
                     "currency": extracted_data.get("currency", "CAD"),
                     "source": "ocr",
                     "ocr_scan_id": scan_id,
-                    # Stocker les pièces dans la facture (pour référence coûts), mais NE PAS créer de part_records
-                    "parts": extracted_data.get("parts", []) + extracted_data.get("parts_replaced", []),
+                    "parts": invoice_parts,
                     "created_at": now,
                     "updated_at": now
                 }
@@ -1097,7 +1110,62 @@ async def apply_ocr_results(
                 result = await db.invoices.insert_one(invoice_doc)
                 applied_ids["invoice_id"] = str(result.inserted_id)
                 invoice_created = True
-                logger.info(f"Created invoice record for aircraft {aircraft_id}")
+                logger.info(f"✅ Created invoice record {applied_ids['invoice_id']} for aircraft {aircraft_id}")
+            
+            # 8. Créer les part_records pour les pièces de la facture
+            invoice_parts = extracted_data.get("parts", []) + extracted_data.get("parts_replaced", [])
+            for part in invoice_parts:
+                part_number = part.get("part_number")
+                if not part_number:
+                    continue
+                
+                # Vérifier si la pièce existe déjà
+                existing_part, match_type = await find_duplicate_part(
+                    db, aircraft_id, current_user.id,
+                    part_number, part.get("serial_number")
+                )
+                
+                if existing_part and match_type == MatchType.EXACT:
+                    # Mettre à jour la pièce existante avec le prix de la facture
+                    update_data = {
+                        "purchase_price": part.get("price") or part.get("total_price") or part.get("unit_price"),
+                        "supplier": extracted_data.get("supplier"),
+                        "source": "ocr_invoice",
+                        "ocr_scan_id": scan_id,
+                        "updated_at": now
+                    }
+                    await db.part_records.update_one(
+                        {"_id": existing_part["_id"]},
+                        {"$set": update_data}
+                    )
+                    applied_ids["part_ids"].append(str(existing_part["_id"]))
+                    logger.info(f"Updated part {part_number} from invoice")
+                else:
+                    # Créer nouvelle pièce
+                    part_doc = {
+                        "user_id": current_user.id,
+                        "aircraft_id": aircraft_id,
+                        "part_number": part_number,
+                        "name": part.get("name") or part.get("description") or part_number,
+                        "serial_number": part.get("serial_number"),
+                        "quantity": part.get("quantity") or 1,
+                        "purchase_price": part.get("price") or part.get("total_price") or part.get("unit_price"),
+                        "supplier": extracted_data.get("supplier"),
+                        "manufacturer": part.get("manufacturer"),
+                        "invoice_id": applied_ids.get("invoice_id"),
+                        "installed_on_aircraft": False,  # Facture = achat, pas encore installé
+                        "source": "ocr_invoice",
+                        "ocr_scan_id": scan_id,
+                        "confirmed": False,
+                        "created_at": now,
+                        "updated_at": now
+                    }
+                    
+                    result = await db.part_records.insert_one(part_doc)
+                    applied_ids["part_ids"].append(str(result.inserted_id))
+                    logger.info(f"✅ Created part {part_number} from invoice")
+            
+            logger.info(f"Created {len(applied_ids['part_ids'])} parts from invoice")
         
         # Update OCR scan status to APPLIED
         await db.ocr_scans.update_one(
