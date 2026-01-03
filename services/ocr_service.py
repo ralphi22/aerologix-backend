@@ -554,25 +554,34 @@ class OCRService:
         for part in data.get("parts", []):
             parts.append({
                 "part_number": part.get("part_number", ""),
-                "name": part.get("name"),
+                "name": part.get("name") or part.get("description"),
+                "description": part.get("description") or part.get("name"),
                 "serial_number": part.get("serial_number"),
                 "quantity": part.get("quantity", 1),
                 "price": self._safe_float(
-                    part.get("total_price") or part.get("unit_price")
+                    part.get("total_price") or part.get("unit_price") or part.get("price")
                 ),
-                "supplier": data.get("supplier"),
+                "unit_price": self._safe_float(part.get("unit_price")),
+                "line_total": self._safe_float(part.get("line_total")),
+                "supplier": data.get("supplier") or data.get("vendor_name"),
                 "manufacturer": part.get("manufacturer")
             })
         
         return {
             "invoice_number": data.get("invoice_number"),
-            "date": data.get("invoice_date"),
-            "supplier": data.get("supplier"),
-            "total_cost": self._safe_float(data.get("total")),
-            "currency": data.get("currency", "USD"),
-            "parts_replaced": parts,
-            "ad_sb_references": [],
-            "stc_references": []
+            "invoice_date": data.get("invoice_date"),  # FIXED: use invoice_date not date
+            "supplier": data.get("supplier") or data.get("vendor_name"),
+            "vendor_name": data.get("vendor_name") or data.get("supplier"),
+            "total": self._safe_float(data.get("total") or data.get("total_cost")),
+            "total_cost": self._safe_float(data.get("total_cost") or data.get("total")),
+            "labor_hours": self._safe_float(data.get("labor_hours")),
+            "labor_cost": self._safe_float(data.get("labor_cost")),
+            "parts_cost": self._safe_float(data.get("parts_cost")),
+            "currency": data.get("currency", "CAD"),
+            "parts": parts,  # Keep as "parts" for APPLY logic
+            "parts_replaced": parts,  # Also provide as parts_replaced for compatibility
+            "ad_sb_references": data.get("ad_sb_references", []),
+            "stc_references": data.get("stc_references", [])
         }
     
     def _safe_float(self, value) -> Optional[float]:
