@@ -214,6 +214,99 @@ class OCRService:
         
         return response
     
+    def _normalize_ocr_keys(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalize OCR response keys from French to English.
+        Ensures all keys match the expected backend schema.
+        """
+        # Mapping des clés françaises vers anglaises
+        KEY_MAPPING = {
+            # Invoice keys (FR -> EN)
+            "numéro_de_facture": "invoice_number",
+            "numero_de_facture": "invoice_number",
+            "numéro_facture": "invoice_number",
+            "numero_facture": "invoice_number",
+            "date_facture": "invoice_date",
+            "fournisseur": "supplier",
+            "vendeur": "vendor_name",
+            "coût_total": "total",
+            "cout_total": "total",
+            "total_facture": "total",
+            "montant_total": "total",
+            "devise": "currency",
+            "pièces_remplacées": "parts_replaced",
+            "pieces_remplacees": "parts_replaced",
+            "pièces": "parts",
+            "pieces": "parts",
+            "références_ad_sb": "ad_sb_references",
+            "references_ad_sb": "ad_sb_references",
+            "références_stc": "stc_references",
+            "references_stc": "stc_references",
+            # Maintenance report keys (FR -> EN)
+            "date_rapport": "report_date",
+            "heures_cellule": "airframe_hours",
+            "heures_moteur": "engine_hours",
+            "heures_hélice": "propeller_hours",
+            "heures_helice": "propeller_hours",
+            "travaux_effectués": "work_performed",
+            "travaux_effectues": "work_performed",
+            "description_travaux": "description",
+            "numéro_bon_travail": "work_order_number",
+            "numero_bon_travail": "work_order_number",
+            "nom_ame": "ame_name",
+            "licence_ame": "ame_license",
+            "nom_amo": "amo_name",
+            "coût_main_oeuvre": "labor_cost",
+            "cout_main_oeuvre": "labor_cost",
+            "heures_main_oeuvre": "labor_hours",
+            "coût_pièces": "parts_cost",
+            "cout_pieces": "parts_cost",
+            "remarques": "remarks",
+            "limitations": "limitations_or_notes",
+            # Part keys (FR -> EN)
+            "numéro_pièce": "part_number",
+            "numero_piece": "part_number",
+            "numéro_série": "serial_number",
+            "numero_serie": "serial_number",
+            "quantité": "quantity",
+            "quantite": "quantity",
+            "prix_unitaire": "unit_price",
+            "prix": "price",
+            "total_ligne": "line_total",
+            "nom": "name",
+            "fabricant": "manufacturer",
+        }
+        
+        def normalize_dict(d: Dict[str, Any]) -> Dict[str, Any]:
+            """Recursively normalize dictionary keys"""
+            if not isinstance(d, dict):
+                return d
+            
+            normalized = {}
+            for key, value in d.items():
+                # Normalize key (lowercase, handle accents)
+                normalized_key = KEY_MAPPING.get(key, key)
+                
+                # Recursively normalize nested structures
+                if isinstance(value, dict):
+                    normalized[normalized_key] = normalize_dict(value)
+                elif isinstance(value, list):
+                    normalized[normalized_key] = [
+                        normalize_dict(item) if isinstance(item, dict) else item
+                        for item in value
+                    ]
+                else:
+                    normalized[normalized_key] = value
+            
+            return normalized
+        
+        normalized_data = normalize_dict(data)
+        
+        # Log normalized keys for debugging
+        logger.info(f"OCR NORMALIZED KEYS = {list(normalized_data.keys())}")
+        
+        return normalized_data
+    
     async def analyze_image(
         self, 
         image_base64: str, 
