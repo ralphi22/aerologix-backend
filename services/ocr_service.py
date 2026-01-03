@@ -363,6 +363,8 @@ class OCRService:
             
             try:
                 extracted_data = json.loads(cleaned_json)
+                # Normalize keys from French to English (if any)
+                extracted_data = self._normalize_ocr_keys(extracted_data)
             except json.JSONDecodeError as e:
                 logger.warning(f"Failed to parse JSON: {e}")
                 # Return raw text if JSON parsing fails
