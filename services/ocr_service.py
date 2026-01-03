@@ -311,6 +311,70 @@ class OCRService:
         
         return normalized_data
     
+    def _normalize_parts(self, data: Dict[str, Any], document_type: str) -> Dict[str, Any]:
+        """
+        Normalize parts data to ensure both 'parts' and 'parts_replaced' keys exist.
+        Searches multiple possible keys (EN and FR) and normalizes the result.
+        """
+        # Search for parts in this priority order
+        normalized_parts = None
+        source_key = None
+        
+        for key in ["parts", "pièces", "pieces", "parts_replaced", "pièces_remplacées", "pieces_remplacees"]:
+            if key in data and data[key]:
+                normalized_parts = data[key]
+                source_key = key
+                break
+        
+        # If no parts found, set empty lists
+        if normalized_parts is None:
+            normalized_parts = []
+        
+        # If parts is a list of strings, convert to list of objects
+        if isinstance(normalized_parts, list) and len(normalized_parts) > 0:
+            converted_parts = []
+            for item in normalized_parts:
+                if isinstance(item, str):
+                    # Convert string to object format
+                    converted_parts.append({
+                        "part_number": None,
+                        "description": item,
+                        "name": item,
+                        "quantity": None,
+                        "unit_price": None,
+                        "line_total": None
+                    })
+                elif isinstance(item, dict):
+                    # Already an object, ensure all expected keys exist
+                    converted_parts.append({
+                        "part_number": item.get("part_number"),
+                        "description": item.get("description") or item.get("name"),
+                        "name": item.get("name") or item.get("description"),
+                        "serial_number": item.get("serial_number"),
+                        "quantity": item.get("quantity"),
+                        "unit_price": item.get("unit_price") or item.get("prix_unitaire"),
+                        "price": item.get("price") or item.get("prix"),
+                        "line_total": item.get("line_total") or item.get("total_ligne"),
+                        "manufacturer": item.get("manufacturer") or item.get("fabricant")
+                    })
+                else:
+                    converted_parts.append(item)
+            normalized_parts = converted_parts
+        
+        # Write to BOTH keys for compatibility with APPLY logic
+        data["parts"] = normalized_parts
+        data["parts_replaced"] = normalized_parts  # Duplicate volontaire pour compat
+        
+        # Log parts normalization
+        logger.info(
+            f"OCR PARTS NORMALIZED | doc_type={document_type} | "
+            f"source_key={source_key} | "
+            f"parts_len={len(data.get('parts', []))} | "
+            f"parts_replaced_len={len(data.get('parts_replaced', []))}"
+        )
+        
+        return data
+    
     async def analyze_image(
         self, 
         image_base64: str, 
