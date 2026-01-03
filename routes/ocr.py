@@ -831,9 +831,47 @@ async def apply_ocr_results(
                 f"OCR DEBUG maintenance parts payload={extracted_data.get('parts_replaced')}"
             )
             
+            # DEDUPLICATION for maintenance report parts
+            raw_maint_parts = extracted_data.get("parts", []) + extracted_data.get("parts_replaced", [])
+            
+            def normalize_maint_part(part):
+                """Normalize part data for deduplication"""
+                return {
+                    "part_number": part.get("part_number") or part.get("numero_piece") or part.get("numéro_pièce"),
+                    "description": part.get("description") or part.get("name") or part.get("nom"),
+                    "name": part.get("name") or part.get("description") or part.get("nom"),
+                    "serial_number": part.get("serial_number") or part.get("numero_serie") or part.get("numéro_série"),
+                    "quantity": part.get("quantity") or part.get("quantité") or part.get("quantite"),
+                    "unit_price": part.get("unit_price") or part.get("prix_unitaire") or part.get("price") or part.get("prix"),
+                    "price": part.get("price") or part.get("prix") or part.get("unit_price") or part.get("prix_unitaire"),
+                    "supplier": part.get("supplier") or part.get("fournisseur"),
+                }
+            
+            def get_maint_dedup_key(part):
+                """Create composite key for deduplication"""
+                pn = str(part.get("part_number") or part.get("description") or "").strip().lower()
+                qty = str(part.get("quantity") or "").strip()
+                price = str(part.get("unit_price") or part.get("price") or "").strip()
+                return f"{pn}|{qty}|{price}"
+            
+            # Normalize and deduplicate
+            normalized_maint_parts = [normalize_maint_part(p) for p in raw_maint_parts if p]
+            seen_maint_keys = set()
+            deduped_maint_parts = []
+            for part in normalized_maint_parts:
+                key = get_maint_dedup_key(part)
+                if key not in seen_maint_keys:
+                    seen_maint_keys.add(key)
+                    deduped_maint_parts.append(part)
+            
+            # PART DEDUP log for maintenance
+            maint_before = len(raw_maint_parts)
+            maint_after = len(deduped_maint_parts)
+            logger.info(f"PART DEDUP | doc_type=maintenance_report | before={maint_before} after={maint_after}")
+            
             parts_selections = {s.index: s for s in (selections.parts or [])} if selections else {}
             
-            for idx, part in enumerate(extracted_data.get("parts_replaced", [])):
+            for idx, part in enumerate(deduped_maint_parts):
                 part_number = part.get("part_number")
                 part_description = part.get("description") or part.get("name")
                 
