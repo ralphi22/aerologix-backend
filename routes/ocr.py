@@ -681,6 +681,11 @@ async def apply_ocr_results(
                 logger.info(f"✅ Updated aircraft {aircraft_id} hours: {hours_update}")
             else:
                 logger.warning(f"⚠️ No hours to update for aircraft {aircraft_id} - extracted values were None or empty")
+        else:
+            if not is_maintenance_report:
+                logger.info(f"ℹ️ Skipping hours update - document_type is '{document_type}' (not maintenance_report)")
+            elif not update_aircraft_hours:
+                logger.info(f"ℹ️ Skipping hours update - update_aircraft_hours=False")
         
         # 2. Create maintenance record (ONLY FOR RAPPORT)
         if is_maintenance_report and (extracted_data.get("description") or extracted_data.get("work_order_number")):
