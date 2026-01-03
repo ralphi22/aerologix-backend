@@ -11,7 +11,7 @@ class PlanTier(str, Enum):
 
 # OCR limits per plan (monthly)
 OCR_LIMITS_BY_PLAN = {
-    PlanTier.BASIC: 5,            # Free: 5 scans/month
+    PlanTier.BASIC: 25,           # Free: 25 scans/month (increased for testing)
     PlanTier.PILOT: 25,           # Basic: 25 scans/month
     PlanTier.MAINTENANCE_PRO: 100, # Pro: 100 scans/month
     PlanTier.FLEET_AI: 500,       # Premium: 500 scans/month
