@@ -822,7 +822,12 @@ async def apply_ocr_results(
             parts_selections = {s.index: s for s in (selections.parts or [])} if selections else {}
             
             for idx, part in enumerate(extracted_data.get("parts_replaced", [])):
-                if not part.get("part_number"):
+                part_number = part.get("part_number")
+                part_description = part.get("description") or part.get("name")
+                
+                # TC-SAFE: Create part if part_number OR description exists
+                if not part_number and not part_description:
+                    logger.warning(f"Skipping part at index {idx}: no part_number AND no description")
                     continue
                 
                 # Check user selection if provided
@@ -830,7 +835,7 @@ async def apply_ocr_results(
                 
                 if selection:
                     if selection.action == ItemAction.SKIP:
-                        logger.info(f"Skipping part {part.get('part_number')} (user choice)")
+                        logger.info(f"Skipping part {part_number or part_description} (user choice)")
                         continue
                     elif selection.action == ItemAction.LINK and selection.existing_id:
                         # Update existing record
@@ -841,22 +846,22 @@ async def apply_ocr_results(
                         }
                         if part.get("serial_number"):
                             update_data["serial_number"] = part["serial_number"]
-                        if part.get("price"):
-                            update_data["purchase_price"] = part["price"]
+                        if part.get("price") or part.get("unit_price"):
+                            update_data["purchase_price"] = part.get("price") or part.get("unit_price")
                         
                         await db.part_records.update_one(
                             {"_id": selection.existing_id, "user_id": current_user.id},
                             {"$set": update_data}
                         )
                         applied_ids["part_ids"].append(selection.existing_id)
-                        logger.info(f"Linked part {part.get('part_number')} to existing {selection.existing_id}")
+                        logger.info(f"Linked part {part_number or part_description} to existing {selection.existing_id}")
                         continue
                 
-                # Auto-dedupe: check if exists when no selections provided
-                if not selections:
+                # Auto-dedupe: check if exists when no selections provided (only if part_number exists)
+                if not selections and part_number:
                     existing, match_type = await find_duplicate_part(
                         db, aircraft_id, current_user.id,
-                        part["part_number"], part.get("serial_number")
+                        part_number, part.get("serial_number")
                     )
                     if existing and match_type == MatchType.EXACT:
                         # Update existing instead of creating duplicate
@@ -865,39 +870,44 @@ async def apply_ocr_results(
                             "ocr_scan_id": scan_id,
                             "updated_at": now
                         }
-                        if part.get("price"):
-                            update_data["purchase_price"] = part["price"]
+                        if part.get("price") or part.get("unit_price"):
+                            update_data["purchase_price"] = part.get("price") or part.get("unit_price")
                         
                         await db.part_records.update_one(
                             {"_id": existing["_id"]},
                             {"$set": update_data}
                         )
                         applied_ids["part_ids"].append(str(existing["_id"]))
-                        logger.info(f"Auto-linked part {part['part_number']} to existing (exact dedup)")
+                        logger.info(f"Auto-linked part {part_number} to existing (exact dedup)")
                         continue
                 
                 # Default: CREATE new record
+                # TC-SAFE: needs_review if critical fields missing
+                needs_review = not part_number or not part.get("quantity")
+                
                 part_doc = {
                     "user_id": current_user.id,
                     "aircraft_id": aircraft_id,
-                    "part_number": part["part_number"],
-                    "name": part.get("name", part["part_number"]),
+                    "part_number": part_number,
+                    "name": part_description or part_number or "Unknown Part",
                     "serial_number": part.get("serial_number"),
-                    "quantity": part.get("quantity", 1),
-                    "purchase_price": part.get("price"),
+                    "quantity": part.get("quantity"),  # Can be None - user validates
+                    "purchase_price": part.get("price") or part.get("unit_price"),
                     "supplier": part.get("supplier"),
                     "installation_date": now,
                     "installation_airframe_hours": extracted_data.get("airframe_hours"),
-                    "installed_on_aircraft": True,
+                    "installed_on_aircraft": True,  # maintenance_report = installed
                     "source": "ocr",
                     "ocr_scan_id": scan_id,
-                    "confirmed": False,  # OCR parts are NOT confirmed by default
+                    "confirmed": False,
+                    "needs_review": needs_review,
                     "created_at": now,
                     "updated_at": now
                 }
                 
                 result = await db.part_records.insert_one(part_doc)
                 applied_ids["part_ids"].append(str(result.inserted_id))
+                logger.info(f"✅ Created part {part_number or part_description} (needs_review={needs_review})")
         
         logger.info(f"Created {len(applied_ids['part_ids'])} part records")
         
