@@ -114,6 +114,17 @@ async def get_aircraft_invoices(
     
     invoices = []
     async for invoice in cursor:
+        # Map total_cost -> total if total is missing
+        total_value = invoice.get("total") or invoice.get("total_cost")
+        
+        # Compute subtotal if missing: parts_cost + labor_cost
+        subtotal_value = invoice.get("subtotal")
+        if subtotal_value is None:
+            parts_cost = invoice.get("parts_cost") or 0
+            labor_cost = invoice.get("labor_cost") or 0
+            if parts_cost or labor_cost:
+                subtotal_value = parts_cost + labor_cost
+        
         invoices.append(InvoiceResponse(
             _id=str(invoice["_id"]),
             user_id=invoice["user_id"],
@@ -122,9 +133,9 @@ async def get_aircraft_invoices(
             invoice_date=invoice.get("invoice_date"),
             supplier=invoice.get("supplier"),
             parts=invoice.get("parts", []),
-            subtotal=invoice.get("subtotal"),
+            subtotal=subtotal_value,
             tax=invoice.get("tax"),
-            total=invoice.get("total"),
+            total=total_value,
             currency=invoice.get("currency", "CAD"),
             source=invoice.get("source", "ocr"),
             ocr_scan_id=invoice.get("ocr_scan_id"),
