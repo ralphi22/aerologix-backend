@@ -26,6 +26,55 @@ def parse_date_string(date_str: Optional[str]) -> Optional[datetime]:
         return None
 
 
+@router.get("/{aircraft_id}", response_model=List[InvoiceResponse])
+async def get_invoices_by_aircraft(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """Get all invoices for an aircraft (frontend route)"""
+    
+    # Verify aircraft belongs to user
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        # Return empty list instead of 404 for frontend compatibility
+        return []
+    
+    # Get invoices sorted by invoice_date desc
+    cursor = db.invoices.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id
+    }).sort("invoice_date", -1)
+    
+    invoices = []
+    async for invoice in cursor:
+        invoices.append(InvoiceResponse(
+            _id=str(invoice["_id"]),
+            user_id=invoice["user_id"],
+            aircraft_id=invoice["aircraft_id"],
+            invoice_number=invoice.get("invoice_number"),
+            invoice_date=invoice.get("invoice_date"),
+            supplier=invoice.get("supplier"),
+            parts=invoice.get("parts", []),
+            subtotal=invoice.get("subtotal"),
+            tax=invoice.get("tax"),
+            total=invoice.get("total"),
+            currency=invoice.get("currency", "CAD"),
+            source=invoice.get("source", "ocr"),
+            ocr_scan_id=invoice.get("ocr_scan_id"),
+            remarks=invoice.get("remarks"),
+            created_at=invoice["created_at"],
+            updated_at=invoice["updated_at"]
+        ))
+    
+    logger.info(f"GET /api/invoices/{aircraft_id} returned {len(invoices)} invoices")
+    return invoices
+
+
 @router.get("/aircraft/{aircraft_id}", response_model=List[InvoiceResponse])
 async def get_aircraft_invoices(
     aircraft_id: str,
