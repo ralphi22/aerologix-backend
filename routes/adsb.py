@@ -163,7 +163,7 @@ async def delete_adsb_record(
     current_user: User = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """Delete an AD/SB record"""
+    """Delete an AD/SB record - ONLY deletes the specified record"""
     
     # Try to convert to ObjectId if it's a valid format, otherwise use string
     try:
@@ -171,6 +171,22 @@ async def delete_adsb_record(
     except Exception:
         query_id = record_id
     
+    # Get record info for logging before deletion
+    record = await db.adsb_records.find_one({
+        "_id": query_id,
+        "user_id": current_user.id
+    })
+    
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="AD/SB record not found"
+        )
+    
+    aircraft_id = record.get("aircraft_id")
+    reference_number = record.get("reference_number")
+    
+    # DELETE ONLY THIS SPECIFIC RECORD
     result = await db.adsb_records.delete_one({
         "_id": query_id,
         "user_id": current_user.id
@@ -181,6 +197,9 @@ async def delete_adsb_record(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="AD/SB record not found"
         )
+    
+    # ADSB DELETE log
+    logger.info(f"ADSB DELETE | record_id={record_id} | aircraft_id={aircraft_id} | reference={reference_number}")
     
     return {"message": "AD/SB record deleted successfully"}
 
