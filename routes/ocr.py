@@ -1129,13 +1129,18 @@ async def apply_ocr_results(
                     # TC-SAFE: needs_review si invoice_number manquant
                     needs_review = not invoice_number
                     
+                    # Compute subtotal if missing: parts_cost + labor_cost
+                    computed_subtotal = extracted_data.get("subtotal")
+                    if computed_subtotal is None and (parts_cost or labor_cost):
+                        computed_subtotal = (parts_cost or 0) + (labor_cost or 0)
+                    
                     invoice_doc = {
                         "user_id": current_user.id,
                         "aircraft_id": aircraft_id,
                         "invoice_number": invoice_number,
                         "invoice_date": invoice_date or now,
                         "supplier": vendor_name,
-                        "subtotal": extracted_data.get("subtotal"),
+                        "subtotal": computed_subtotal,
                         "tax": extracted_data.get("tax"),
                         "total": invoice_total,
                         "labor_hours": labor_hours,
@@ -1154,6 +1159,12 @@ async def apply_ocr_results(
                     applied_ids["invoice_id"] = str(result.inserted_id)
                     invoice_created = True
                     logger.info(f"✅ Created invoice record {applied_ids['invoice_id']} for aircraft {aircraft_id} (needs_review={needs_review})")
+                    
+                    # OCR INVOICE SUMMARY log
+                    logger.info(
+                        f"OCR INVOICE SUMMARY | invoice_id={applied_ids['invoice_id']} | "
+                        f"labor={labor_cost} | parts={parts_cost} | total={invoice_total}"
+                    )
             else:
                 logger.warning(f"⚠️ No invoice created: no cost data and no parts found")
             
