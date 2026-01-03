@@ -1170,6 +1170,10 @@ async def apply_ocr_results(
                 
                 # TC-SAFE: Create part if part_number OR description exists
                 if not part_number and not part_description:
+                    # OCR DEBUG: Log skipped invoice part with reason
+                    logger.warning(
+                        f"OCR DEBUG part skipped index={idx} reason=missing_part_number_or_description payload={part}"
+                    )
                     logger.warning(f"Skipping invoice part at index {idx}: no part_number AND no description")
                     continue
                 
