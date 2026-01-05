@@ -148,6 +148,7 @@ async def delete_stc_record(
     db=Depends(get_database)
 ):
     """Delete an STC record - PERMANENT DELETION by _id only"""
+    logger.info(f"DELETE REQUEST RECEIVED | route=/api/stc/record/{record_id} | user={current_user.id}")
     return await _delete_stc_by_id(record_id, current_user, db)
 
 
@@ -158,6 +159,7 @@ async def delete_stc_direct(
     db=Depends(get_database)
 ):
     """Delete an STC record by ID - PERMANENT DELETION (frontend route)"""
+    logger.info(f"DELETE REQUEST RECEIVED | route=/api/stc/{stc_id} | user={current_user.id}")
     return await _delete_stc_by_id(stc_id, current_user, db)
 
 
