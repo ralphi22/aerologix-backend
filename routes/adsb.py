@@ -167,6 +167,25 @@ async def delete_adsb_record(
     db=Depends(get_database)
 ):
     """Delete an AD/SB record - PERMANENT DELETION by _id only"""
+    return await _delete_adsb_by_id(record_id, current_user, db)
+
+
+@router.delete("/{adsb_id}")
+async def delete_adsb_direct(
+    adsb_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """Delete an AD/SB record by ID - PERMANENT DELETION (frontend route)"""
+    return await _delete_adsb_by_id(adsb_id, current_user, db)
+
+
+async def _delete_adsb_by_id(
+    record_id: str,
+    current_user: User,
+    db
+):
+    """Internal function to delete an AD/SB by _id - ATOMIC OPERATION"""
     
     # Try BOTH ObjectId and string formats for _id lookup
     query_id_objectid = None
@@ -198,29 +217,27 @@ async def delete_adsb_record(
             actual_query_id = query_id_string
     
     if not record:
+        logger.warning(f"DELETE FAILED | reason=not_found_or_not_owner | collection=adsb | id={record_id} | user={current_user.id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="AD/SB record not found"
         )
     
-    aircraft_id = record.get("aircraft_id")
-    reference_number = record.get("reference_number")
-    
-    # PERMANENT DELETE - ONLY THIS SPECIFIC RECORD by _id
+    # PERMANENT DELETE - ONLY THIS SPECIFIC RECORD by _id + user_id
     result = await db.adsb_records.delete_one({
         "_id": actual_query_id,
         "user_id": current_user.id
     })
     
     if result.deleted_count == 0:
+        logger.warning(f"DELETE FAILED | reason=delete_count_zero | collection=adsb | id={record_id} | user={current_user.id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="AD/SB record not found or already deleted"
         )
     
-    # DELETE AUDIT log - MANDATORY
-    logger.info(f"DELETE AUDIT | collection=adsb | id={record_id} | user={current_user.id}")
-    logger.info(f"DELETE CONFIRMED | collection=adsb | id={record_id}")
+    # DELETE CONFIRMED log - MANDATORY
+    logger.info(f"DELETE CONFIRMED | collection=adsb | id={record_id} | user={current_user.id}")
     
     return {"message": "AD/SB record deleted successfully", "deleted_id": record_id}
 
