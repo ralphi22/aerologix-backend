@@ -1123,11 +1123,23 @@ async def apply_ocr_results(
             has_any_cost = invoice_total or parts_cost or labor_cost
             
             # ============================================================
-            # BILINGUAL INVOICE SUPPORT (FR/EN) - Canada Aviation
+            # INVOICE PART DEDUPLICATION - FIX FOR DUPLICATE CREATION
             # ============================================================
             
-            # 1. FUSION: Merge parts and parts_replaced from OCR
-            raw_parts = (extracted_data.get("parts") or []) + (extracted_data.get("parts_replaced") or [])
+            # 1. USE SINGLE SOURCE: Prefer 'parts', fallback to 'parts_replaced'
+            # DO NOT concatenate both - they often contain the same data
+            ocr_parts = extracted_data.get("parts") or []
+            ocr_parts_replaced = extracted_data.get("parts_replaced") or []
+            
+            if ocr_parts and len(ocr_parts) > 0:
+                invoice_parts_raw = ocr_parts
+                logger.info(f"INVOICE PARTS SOURCE | using 'parts' field | count={len(ocr_parts)}")
+            elif ocr_parts_replaced and len(ocr_parts_replaced) > 0:
+                invoice_parts_raw = ocr_parts_replaced
+                logger.info(f"INVOICE PARTS SOURCE | using 'parts_replaced' field | count={len(ocr_parts_replaced)}")
+            else:
+                invoice_parts_raw = []
+                logger.info("INVOICE PARTS SOURCE | no parts found")
             
             # 2. NORMALIZATION: Map FR keys to EN keys for each part
             def normalize_invoice_part(part):
@@ -1200,25 +1212,30 @@ async def apply_ocr_results(
                     "manufacturer": manufacturer,
                 }
             
-            # 3. DEDUPLICATION: Create composite key for each part
+            # 3. DEDUPLICATION: Create stable composite key for each part
             def get_part_dedup_key(normalized_part):
                 """
-                Create composite key: part_number + quantity + unit_price
-                Used to detect duplicates from bilingual extraction.
+                Create stable composite key for deduplication.
+                key = lower(trim(part_number or description or name)) | qty | unit_price | line_total
                 """
-                pn = str(normalized_part.get("part_number") or normalized_part.get("name") or "").strip().lower()
-                qty = str(normalized_part.get("quantity") or "").strip()
-                price = str(normalized_part.get("unit_price") or "").strip()
-                return f"{pn}|{qty}|{price}"
+                part_key = str(
+                    normalized_part.get("part_number") or 
+                    normalized_part.get("description") or 
+                    normalized_part.get("name") or ""
+                ).strip().lower()
+                qty = str(normalized_part.get("quantity") or 1).strip()
+                unit = str(normalized_part.get("unit_price") or normalized_part.get("price") or "").strip()
+                line = str(normalized_part.get("line_total") or normalized_part.get("price") or "").strip()
+                return f"{part_key}|{qty}|{unit}|{line}"
             
             # Normalize all parts
             normalized_parts = []
-            for p in raw_parts:
+            for p in invoice_parts_raw:
                 normalized = normalize_invoice_part(p)
                 if normalized:
                     normalized_parts.append(normalized)
             
-            # Deduplicate using composite key
+            # Deduplicate using stable composite key
             seen_dedup_keys = set()
             deduped_parts = []
             for part in normalized_parts:
