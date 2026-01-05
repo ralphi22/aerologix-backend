@@ -1413,7 +1413,7 @@ async def apply_ocr_results(
             
             # FINAL LOG: OCR INVOICE PARTS with actual CREATED count
             logger.info(
-                f"OCR INVOICE PARTS RAW={len(raw_parts)} "
+                f"OCR INVOICE PARTS RAW={len(invoice_parts_raw)} "
                 f"NORMALIZED={len(normalized_parts)} "
                 f"DEDUPED={len(deduped_parts)} "
                 f"CREATED={created_count}"
