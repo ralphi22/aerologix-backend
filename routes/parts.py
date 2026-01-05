@@ -237,6 +237,7 @@ async def delete_part_record(
     db=Depends(get_database)
 ):
     """Delete a part record - PERMANENT DELETION by _id only"""
+    logger.info(f"DELETE REQUEST RECEIVED | route=/api/parts/record/{record_id} | user={current_user.id}")
     return await _delete_part_by_id(record_id, current_user, db)
 
 
@@ -247,6 +248,7 @@ async def delete_part_direct(
     db=Depends(get_database)
 ):
     """Delete a part record by ID - PERMANENT DELETION (frontend route)"""
+    logger.info(f"DELETE REQUEST RECEIVED | route=/api/parts/{part_id} | user={current_user.id}")
     return await _delete_part_by_id(part_id, current_user, db)
 
 
