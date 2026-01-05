@@ -23,7 +23,7 @@ async def get_parts_by_aircraft(
     current_user: User = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """Get all parts for an aircraft (frontend route)"""
+    """Get all parts for an aircraft (frontend route) - READS DIRECTLY FROM DB"""
     
     # Verify aircraft belongs to user
     aircraft = await db.aircrafts.find_one({
@@ -33,9 +33,10 @@ async def get_parts_by_aircraft(
     
     if not aircraft:
         # Return empty list instead of 404 for frontend compatibility
+        logger.info(f"GET parts | aircraft={aircraft_id} | count=0 (aircraft not found)")
         return []
     
-    # Get parts sorted by created_at desc
+    # Get parts sorted by created_at desc - DIRECT DB READ, NO CACHE, NO OCR RECONSTRUCTION
     cursor = db.part_records.find({
         "aircraft_id": aircraft_id,
         "user_id": current_user.id
@@ -46,7 +47,8 @@ async def get_parts_by_aircraft(
         record["_id"] = str(record["_id"])
         records.append(record)
     
-    logger.info(f"GET /api/parts/{aircraft_id} returned {len(records)} parts")
+    # LOG: GET parts count
+    logger.info(f"GET parts | aircraft={aircraft_id} | count={len(records)}")
     return records
 
 
