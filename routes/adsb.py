@@ -166,19 +166,36 @@ async def delete_adsb_record(
     current_user: User = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """Delete an AD/SB record - ONLY deletes the specified record"""
+    """Delete an AD/SB record - PERMANENT DELETION by _id only"""
     
-    # Try to convert to ObjectId if it's a valid format, otherwise use string
+    # Try BOTH ObjectId and string formats for _id lookup
+    query_id_objectid = None
+    query_id_string = record_id
+    
     try:
-        query_id = ObjectId(record_id)
+        query_id_objectid = ObjectId(record_id)
     except Exception:
-        query_id = record_id
+        pass
     
-    # Get record info for logging before deletion
-    record = await db.adsb_records.find_one({
-        "_id": query_id,
-        "user_id": current_user.id
-    })
+    # First, try to find the record (try ObjectId first, then string)
+    record = None
+    actual_query_id = None
+    
+    if query_id_objectid:
+        record = await db.adsb_records.find_one({
+            "_id": query_id_objectid,
+            "user_id": current_user.id
+        })
+        if record:
+            actual_query_id = query_id_objectid
+    
+    if not record:
+        record = await db.adsb_records.find_one({
+            "_id": query_id_string,
+            "user_id": current_user.id
+        })
+        if record:
+            actual_query_id = query_id_string
     
     if not record:
         raise HTTPException(
@@ -189,22 +206,23 @@ async def delete_adsb_record(
     aircraft_id = record.get("aircraft_id")
     reference_number = record.get("reference_number")
     
-    # DELETE ONLY THIS SPECIFIC RECORD
+    # PERMANENT DELETE - ONLY THIS SPECIFIC RECORD by _id
     result = await db.adsb_records.delete_one({
-        "_id": query_id,
+        "_id": actual_query_id,
         "user_id": current_user.id
     })
     
     if result.deleted_count == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="AD/SB record not found"
+            detail="AD/SB record not found or already deleted"
         )
     
-    # ADSB DELETE log
-    logger.info(f"ADSB DELETE | record_id={record_id} | aircraft_id={aircraft_id} | reference={reference_number}")
+    # DELETE AUDIT log - MANDATORY
+    logger.info(f"DELETE AUDIT | collection=adsb | id={record_id} | user={current_user.id}")
+    logger.info(f"DELETE CONFIRMED | collection=adsb | id={record_id}")
     
-    return {"message": "AD/SB record deleted successfully"}
+    return {"message": "AD/SB record deleted successfully", "deleted_id": record_id}
 
 
 @router.get("/{aircraft_id}/summary")
