@@ -1120,46 +1120,122 @@ async def apply_ocr_results(
             
             # TC-SAFE: Créer facture si au moins un coût existe
             has_any_cost = invoice_total or parts_cost or labor_cost
-            raw_invoice_parts = extracted_data.get("parts", []) + extracted_data.get("parts_replaced", [])
             
-            # DEDUPLICATION: Normalize and deduplicate parts using composite key
-            def normalize_part(part):
-                """Normalize part data for deduplication"""
+            # ============================================================
+            # BILINGUAL INVOICE SUPPORT (FR/EN) - Canada Aviation
+            # ============================================================
+            
+            # 1. FUSION: Merge parts and parts_replaced from OCR
+            raw_parts = (extracted_data.get("parts") or []) + (extracted_data.get("parts_replaced") or [])
+            
+            # 2. NORMALIZATION: Map FR keys to EN keys for each part
+            def normalize_invoice_part(part):
+                """
+                Normalize part data from bilingual OCR (FR/EN).
+                Maps all French keys to English equivalents.
+                """
+                if not part or not isinstance(part, dict):
+                    return None
+                
+                # Map: part_number (EN) | numéro_de_pièce, numéro_pièce, numero_piece (FR)
+                part_number = (
+                    part.get("part_number") or 
+                    part.get("numéro_de_pièce") or 
+                    part.get("numéro_pièce") or 
+                    part.get("numero_piece") or
+                    part.get("numero_de_piece")
+                )
+                
+                # Map: name (EN) | nom (FR)
+                name = (
+                    part.get("name") or 
+                    part.get("description") or 
+                    part.get("nom")
+                )
+                
+                # Map: quantity (EN) | quantité, quantite (FR)
+                quantity = (
+                    part.get("quantity") or 
+                    part.get("quantité") or 
+                    part.get("quantite")
+                )
+                
+                # Map: unit_price (EN) | prix_unitaire, prix (FR)
+                unit_price = (
+                    part.get("unit_price") or 
+                    part.get("prix_unitaire") or 
+                    part.get("price") or 
+                    part.get("prix")
+                )
+                
+                # Map: line_total (EN) | total_ligne (FR)
+                line_total = (
+                    part.get("line_total") or 
+                    part.get("total_ligne")
+                )
+                
+                # Map: serial_number (EN) | numéro_série, numero_serie (FR)
+                serial_number = (
+                    part.get("serial_number") or 
+                    part.get("numéro_série") or 
+                    part.get("numero_serie")
+                )
+                
+                # Map: manufacturer (EN) | fabricant (FR)
+                manufacturer = (
+                    part.get("manufacturer") or 
+                    part.get("fabricant")
+                )
+                
                 return {
-                    "part_number": part.get("part_number") or part.get("numero_piece") or part.get("numéro_pièce"),
-                    "description": part.get("description") or part.get("name") or part.get("nom"),
-                    "name": part.get("name") or part.get("description") or part.get("nom"),
-                    "serial_number": part.get("serial_number") or part.get("numero_serie") or part.get("numéro_série"),
-                    "quantity": part.get("quantity") or part.get("quantité") or part.get("quantite"),
-                    "unit_price": part.get("unit_price") or part.get("prix_unitaire") or part.get("price") or part.get("prix"),
-                    "price": part.get("price") or part.get("prix") or part.get("unit_price") or part.get("prix_unitaire"),
-                    "line_total": part.get("line_total") or part.get("total_ligne"),
-                    "manufacturer": part.get("manufacturer") or part.get("fabricant"),
+                    "part_number": part_number,
+                    "name": name,
+                    "description": name,
+                    "quantity": quantity,
+                    "unit_price": unit_price,
+                    "price": unit_price,
+                    "line_total": line_total,
+                    "serial_number": serial_number,
+                    "manufacturer": manufacturer,
                 }
             
-            def get_dedup_key(part):
-                """Create composite key for deduplication: part_number + quantity + unit_price"""
-                pn = str(part.get("part_number") or part.get("description") or "").strip().lower()
-                qty = str(part.get("quantity") or "").strip()
-                price = str(part.get("unit_price") or part.get("price") or "").strip()
+            # 3. DEDUPLICATION: Create composite key for each part
+            def get_part_dedup_key(normalized_part):
+                """
+                Create composite key: part_number + quantity + unit_price
+                Used to detect duplicates from bilingual extraction.
+                """
+                pn = str(normalized_part.get("part_number") or normalized_part.get("name") or "").strip().lower()
+                qty = str(normalized_part.get("quantity") or "").strip()
+                price = str(normalized_part.get("unit_price") or "").strip()
                 return f"{pn}|{qty}|{price}"
             
             # Normalize all parts
-            normalized_parts = [normalize_part(p) for p in raw_invoice_parts if p]
+            normalized_parts = []
+            for p in raw_parts:
+                normalized = normalize_invoice_part(p)
+                if normalized:
+                    normalized_parts.append(normalized)
             
             # Deduplicate using composite key
-            seen_keys = set()
-            invoice_parts = []
+            seen_dedup_keys = set()
+            deduped_parts = []
             for part in normalized_parts:
-                key = get_dedup_key(part)
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    invoice_parts.append(part)
+                dedup_key = get_part_dedup_key(part)
+                if dedup_key not in seen_dedup_keys:
+                    seen_dedup_keys.add(dedup_key)
+                    deduped_parts.append(part)
             
-            # PART DEDUP log
-            before_count = len(raw_invoice_parts)
-            after_count = len(invoice_parts)
-            logger.info(f"PART DEDUP | before={before_count} after={after_count}")
+            # Use deduped_parts as invoice_parts for creation
+            invoice_parts = deduped_parts
+            
+            # LOG: OCR INVOICE PARTS stats (REQUIRED FORMAT)
+            logger.info(
+                f"OCR INVOICE PARTS RAW={len(raw_parts)} "
+                f"NORMALIZED={len(normalized_parts)} "
+                f"DEDUPED={len(deduped_parts)} "
+                f"CREATED=pending"
+            )
             
             has_parts = len(invoice_parts) > 0
             
