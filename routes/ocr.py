@@ -625,9 +625,10 @@ async def apply_ocr_results(
             detail="OCR scan not found"
         )
     
-    # Check if scan can be applied
+    # GUARD: Check if scan can be applied - PREVENT RE-CREATION
     scan_status = scan.get("status", "")
     if scan_status == OCRStatus.APPLIED.value:
+        logger.warning(f"OCR APPLY SKIPPED — scan {scan_id} already applied")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Ce scan a déjà été appliqué"
