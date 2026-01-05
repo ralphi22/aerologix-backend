@@ -832,8 +832,20 @@ async def apply_ocr_results(
                 f"OCR DEBUG maintenance parts payload={extracted_data.get('parts_replaced')}"
             )
             
-            # DEDUPLICATION for maintenance report parts
-            raw_maint_parts = extracted_data.get("parts", []) + extracted_data.get("parts_replaced", [])
+            # USE SINGLE SOURCE for maintenance parts (like invoices)
+            # Prefer 'parts_replaced', fallback to 'parts'
+            maint_parts_replaced = extracted_data.get("parts_replaced") or []
+            maint_parts = extracted_data.get("parts") or []
+            
+            if maint_parts_replaced and len(maint_parts_replaced) > 0:
+                raw_maint_parts = maint_parts_replaced
+                logger.info(f"MAINT PARTS SOURCE | using 'parts_replaced' field | count={len(maint_parts_replaced)}")
+            elif maint_parts and len(maint_parts) > 0:
+                raw_maint_parts = maint_parts
+                logger.info(f"MAINT PARTS SOURCE | using 'parts' field | count={len(maint_parts)}")
+            else:
+                raw_maint_parts = []
+                logger.info("MAINT PARTS SOURCE | no parts found")
             
             def normalize_maint_part(part):
                 """Normalize part data for deduplication"""
@@ -849,9 +861,9 @@ async def apply_ocr_results(
                 }
             
             def get_maint_dedup_key(part):
-                """Create composite key for deduplication"""
-                pn = str(part.get("part_number") or part.get("description") or "").strip().lower()
-                qty = str(part.get("quantity") or "").strip()
+                """Create composite key for deduplication: (part_number OR name, quantity, unit_price)"""
+                pn = str(part.get("part_number") or part.get("name") or part.get("description") or "").strip().lower()
+                qty = str(part.get("quantity") or 1).strip()
                 price = str(part.get("unit_price") or part.get("price") or "").strip()
                 return f"{pn}|{qty}|{price}"
             
@@ -865,10 +877,8 @@ async def apply_ocr_results(
                     seen_maint_keys.add(key)
                     deduped_maint_parts.append(part)
             
-            # PART DEDUP log for maintenance
-            maint_before = len(raw_maint_parts)
-            maint_after = len(deduped_maint_parts)
-            logger.info(f"PART DEDUP | doc_type=maintenance_report | before={maint_before} after={maint_after}")
+            # PART DEDUP FINAL log for maintenance (REQUIRED FORMAT)
+            logger.info(f"PART DEDUP FINAL | before={len(raw_maint_parts)} | after={len(deduped_maint_parts)}")
             
             parts_selections = {s.index: s for s in (selections.parts or [])} if selections else {}
             
