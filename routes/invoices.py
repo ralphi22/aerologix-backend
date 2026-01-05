@@ -218,25 +218,58 @@ async def delete_invoice(
     current_user: User = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """Delete invoice record"""
+    """Delete invoice record - PERMANENT DELETION by _id only"""
     from bson import ObjectId
     
-    try:
-        query_id = ObjectId(invoice_id)
-    except Exception:
-        query_id = invoice_id
+    # Try BOTH ObjectId and string formats for _id lookup
+    query_id_objectid = None
+    query_id_string = invoice_id
     
+    try:
+        query_id_objectid = ObjectId(invoice_id)
+    except Exception:
+        pass
+    
+    # First, try to find the record (try ObjectId first, then string)
+    record = None
+    actual_query_id = None
+    
+    if query_id_objectid:
+        record = await db.invoices.find_one({
+            "_id": query_id_objectid,
+            "user_id": current_user.id
+        })
+        if record:
+            actual_query_id = query_id_objectid
+    
+    if not record:
+        record = await db.invoices.find_one({
+            "_id": query_id_string,
+            "user_id": current_user.id
+        })
+        if record:
+            actual_query_id = query_id_string
+    
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invoice not found"
+        )
+    
+    # PERMANENT DELETE - ONLY THIS SPECIFIC RECORD by _id
     result = await db.invoices.delete_one({
-        "_id": query_id,
+        "_id": actual_query_id,
         "user_id": current_user.id
     })
     
     if result.deleted_count == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invoice not found"
+            detail="Invoice not found or already deleted"
         )
     
-    logger.info(f"Deleted invoice {invoice_id}")
+    # DELETE AUDIT log - MANDATORY
+    logger.info(f"DELETE AUDIT | collection=invoices | id={invoice_id} | user={current_user.id}")
+    logger.info(f"DELETE CONFIRMED | collection=invoices | id={invoice_id}")
     
-    return {"message": "Invoice deleted successfully"}
+    return {"message": "Invoice deleted successfully", "deleted_id": invoice_id}
