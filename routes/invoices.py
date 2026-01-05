@@ -32,7 +32,7 @@ async def get_invoices_by_aircraft(
     current_user: User = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """Get all invoices for an aircraft (frontend route)"""
+    """Get all invoices for an aircraft - READS DIRECTLY FROM DB"""
     
     # Verify aircraft belongs to user
     aircraft = await db.aircrafts.find_one({
@@ -42,9 +42,10 @@ async def get_invoices_by_aircraft(
     
     if not aircraft:
         # Return empty list instead of 404 for frontend compatibility
+        logger.info(f"GET invoices | aircraft={aircraft_id} | count=0 (aircraft not found)")
         return []
     
-    # Get invoices sorted by invoice_date desc
+    # DIRECT DB READ - NO CACHE, NO OCR RECONSTRUCTION
     cursor = db.invoices.find({
         "aircraft_id": aircraft_id,
         "user_id": current_user.id
@@ -82,7 +83,8 @@ async def get_invoices_by_aircraft(
             updated_at=invoice["updated_at"]
         ))
     
-    logger.info(f"GET /api/invoices/{aircraft_id} returned {len(invoices)} invoices")
+    # LOG: GET invoices count
+    logger.info(f"GET invoices | aircraft={aircraft_id} | count={len(invoices)}")
     return invoices
 
 
