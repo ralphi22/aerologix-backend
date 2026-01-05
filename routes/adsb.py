@@ -167,6 +167,7 @@ async def delete_adsb_record(
     db=Depends(get_database)
 ):
     """Delete an AD/SB record - PERMANENT DELETION by _id only"""
+    logger.info(f"DELETE REQUEST RECEIVED | route=/api/adsb/record/{record_id} | user={current_user.id}")
     return await _delete_adsb_by_id(record_id, current_user, db)
 
 
@@ -177,6 +178,7 @@ async def delete_adsb_direct(
     db=Depends(get_database)
 ):
     """Delete an AD/SB record by ID - PERMANENT DELETION (frontend route)"""
+    logger.info(f"DELETE REQUEST RECEIVED | route=/api/adsb/{adsb_id} | user={current_user.id}")
     return await _delete_adsb_by_id(adsb_id, current_user, db)
 
 
