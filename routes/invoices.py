@@ -251,25 +251,26 @@ async def delete_invoice(
             actual_query_id = query_id_string
     
     if not record:
+        logger.warning(f"DELETE FAILED | reason=not_found_or_not_owner | collection=invoices | id={invoice_id} | user={current_user.id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Invoice not found"
         )
     
-    # PERMANENT DELETE - ONLY THIS SPECIFIC RECORD by _id
+    # PERMANENT DELETE - ONLY THIS SPECIFIC RECORD by _id + user_id
     result = await db.invoices.delete_one({
         "_id": actual_query_id,
         "user_id": current_user.id
     })
     
     if result.deleted_count == 0:
+        logger.warning(f"DELETE FAILED | reason=delete_count_zero | collection=invoices | id={invoice_id} | user={current_user.id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Invoice not found or already deleted"
         )
     
-    # DELETE AUDIT log - MANDATORY
-    logger.info(f"DELETE AUDIT | collection=invoices | id={invoice_id} | user={current_user.id}")
-    logger.info(f"DELETE CONFIRMED | collection=invoices | id={invoice_id}")
+    # DELETE CONFIRMED log - MANDATORY
+    logger.info(f"DELETE CONFIRMED | collection=invoices | id={invoice_id} | user={current_user.id}")
     
     return {"message": "Invoice deleted successfully", "deleted_id": invoice_id}
