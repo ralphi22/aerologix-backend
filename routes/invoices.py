@@ -221,6 +221,8 @@ async def delete_invoice(
     """Delete invoice record - PERMANENT DELETION (same pattern as OCR delete)"""
     from bson import ObjectId
     
+    logger.info(f"DELETE REQUEST RECEIVED | route=/api/invoices/{invoice_id} | user={current_user.id}")
+    
     # Try to find by string ID first
     record = await db.invoices.find_one({
         "_id": invoice_id,
