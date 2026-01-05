@@ -57,7 +57,7 @@ async def get_stc_records(
     current_user: User = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """Get all STC records for an aircraft"""
+    """Get all STC records for an aircraft - READS DIRECTLY FROM DB"""
     
     # Verify aircraft belongs to user
     aircraft = await db.aircrafts.find_one({
@@ -71,6 +71,7 @@ async def get_stc_records(
             detail="Aircraft not found"
         )
     
+    # DIRECT DB READ - NO CACHE, NO OCR RECONSTRUCTION
     cursor = db.stc_records.find({
         "aircraft_id": aircraft_id,
         "user_id": current_user.id
@@ -81,6 +82,8 @@ async def get_stc_records(
         record["_id"] = str(record["_id"])
         records.append(record)
     
+    # LOG: GET stc count
+    logger.info(f"GET stc | aircraft={aircraft_id} | count={len(records)}")
     return records
 
 
