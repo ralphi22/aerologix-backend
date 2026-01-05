@@ -185,36 +185,23 @@ async def _delete_adsb_by_id(
     current_user: User,
     db
 ):
-    """Internal function to delete an AD/SB by _id - ATOMIC OPERATION"""
+    """Internal function to delete an AD/SB by _id - ATOMIC OPERATION (same pattern as OCR delete)"""
     
-    # Try BOTH ObjectId and string formats for _id lookup
-    query_id_objectid = None
-    query_id_string = record_id
-    
-    try:
-        query_id_objectid = ObjectId(record_id)
-    except Exception:
-        pass
-    
-    # First, try to find the record (try ObjectId first, then string)
-    record = None
-    actual_query_id = None
-    
-    if query_id_objectid:
-        record = await db.adsb_records.find_one({
-            "_id": query_id_objectid,
-            "user_id": current_user.id
-        })
-        if record:
-            actual_query_id = query_id_objectid
+    # Try to find by string ID first
+    record = await db.adsb_records.find_one({
+        "_id": record_id,
+        "user_id": current_user.id
+    })
     
     if not record:
-        record = await db.adsb_records.find_one({
-            "_id": query_id_string,
-            "user_id": current_user.id
-        })
-        if record:
-            actual_query_id = query_id_string
+        # Try with ObjectId
+        try:
+            record = await db.adsb_records.find_one({
+                "_id": ObjectId(record_id),
+                "user_id": current_user.id
+            })
+        except:
+            pass
     
     if not record:
         logger.warning(f"DELETE FAILED | reason=not_found_or_not_owner | collection=adsb | id={record_id} | user={current_user.id}")
@@ -223,11 +210,11 @@ async def _delete_adsb_by_id(
             detail="AD/SB record not found"
         )
     
-    # PERMANENT DELETE - ONLY THIS SPECIFIC RECORD by _id + user_id
-    result = await db.adsb_records.delete_one({
-        "_id": actual_query_id,
-        "user_id": current_user.id
-    })
+    # DELETE using the EXACT _id from the found document (same as OCR delete)
+    if isinstance(record["_id"], ObjectId):
+        result = await db.adsb_records.delete_one({"_id": record["_id"]})
+    else:
+        result = await db.adsb_records.delete_one({"_id": record_id})
     
     if result.deleted_count == 0:
         logger.warning(f"DELETE FAILED | reason=delete_count_zero | collection=adsb | id={record_id} | user={current_user.id}")
