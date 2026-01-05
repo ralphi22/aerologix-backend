@@ -148,6 +148,25 @@ async def delete_stc_record(
     db=Depends(get_database)
 ):
     """Delete an STC record - PERMANENT DELETION by _id only"""
+    return await _delete_stc_by_id(record_id, current_user, db)
+
+
+@router.delete("/{stc_id}")
+async def delete_stc_direct(
+    stc_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """Delete an STC record by ID - PERMANENT DELETION (frontend route)"""
+    return await _delete_stc_by_id(stc_id, current_user, db)
+
+
+async def _delete_stc_by_id(
+    record_id: str,
+    current_user: User,
+    db
+):
+    """Internal function to delete an STC by _id - ATOMIC OPERATION"""
     
     # Try BOTH ObjectId and string formats for _id lookup
     query_id_objectid = None
@@ -179,25 +198,26 @@ async def delete_stc_record(
             actual_query_id = query_id_string
     
     if not record:
+        logger.warning(f"DELETE FAILED | reason=not_found_or_not_owner | collection=stc | id={record_id} | user={current_user.id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="STC record not found"
         )
     
-    # PERMANENT DELETE - ONLY THIS SPECIFIC RECORD by _id
+    # PERMANENT DELETE - ONLY THIS SPECIFIC RECORD by _id + user_id
     result = await db.stc_records.delete_one({
         "_id": actual_query_id,
         "user_id": current_user.id
     })
     
     if result.deleted_count == 0:
+        logger.warning(f"DELETE FAILED | reason=delete_count_zero | collection=stc | id={record_id} | user={current_user.id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="STC record not found or already deleted"
         )
     
-    # DELETE AUDIT log - MANDATORY
-    logger.info(f"DELETE AUDIT | collection=stc | id={record_id} | user={current_user.id}")
-    logger.info(f"DELETE CONFIRMED | collection=stc | id={record_id}")
+    # DELETE CONFIRMED log - MANDATORY
+    logger.info(f"DELETE CONFIRMED | collection=stc | id={record_id} | user={current_user.id}")
     
     return {"message": "STC record deleted successfully", "deleted_id": record_id}
