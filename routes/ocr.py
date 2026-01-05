@@ -1329,12 +1329,9 @@ async def apply_ocr_results(
                 f"total={extracted_data.get('total')}"
             )
             
-            # 8. Créer les part_records pour les pièces de la facture
-            # OCR DEBUG: Log parts payload before processing (facture)
-            logger.info(
-                f"OCR DEBUG invoice parts payload="
-                f"{extracted_data.get('parts', []) + extracted_data.get('parts_replaced', [])}"
-            )
+            # 8. Créer les part_records pour les pièces de la facture (DEDUPED)
+            # Using already deduped invoice_parts - NO additional concatenation
+            created_count = 0
             
             for idx, part in enumerate(invoice_parts):
                 part_number = part.get("part_number")
@@ -1342,14 +1339,12 @@ async def apply_ocr_results(
                 
                 # TC-SAFE: Create part if part_number OR description exists
                 if not part_number and not part_description:
-                    # OCR DEBUG: Log skipped invoice part with reason
                     logger.warning(
-                        f"OCR DEBUG part skipped index={idx} reason=missing_part_number_or_description payload={part}"
+                        f"OCR DEBUG part skipped index={idx} reason=missing_part_number_or_description"
                     )
-                    logger.warning(f"Skipping invoice part at index {idx}: no part_number AND no description")
                     continue
                 
-                # Vérifier si la pièce existe déjà (only if part_number exists)
+                # Check if part already exists in DB (only if part_number exists)
                 existing_part = None
                 if part_number:
                     existing_part, match_type = await find_duplicate_part(
@@ -1358,9 +1353,9 @@ async def apply_ocr_results(
                     )
                 
                 if existing_part and match_type == MatchType.EXACT:
-                    # Mettre à jour la pièce existante avec le prix de la facture
+                    # Update existing part with invoice price
                     update_data = {
-                        "purchase_price": part.get("price") or part.get("line_total") or part.get("unit_price"),
+                        "purchase_price": part.get("unit_price") or part.get("line_total"),
                         "supplier": vendor_name,
                         "source": "ocr_invoice",
                         "ocr_scan_id": scan_id,
@@ -1371,37 +1366,45 @@ async def apply_ocr_results(
                         {"$set": update_data}
                     )
                     applied_ids["part_ids"].append(str(existing_part["_id"]))
-                    logger.info(f"Updated part {part_number} from invoice")
+                    logger.info(f"Updated existing part {part_number} from invoice")
                 else:
-                    # TC-SAFE: needs_review if critical fields missing
-                    needs_review = not part_number or not part.get("quantity")
+                    # Determine needs_review: False if all fields present
+                    has_all_fields = part_number and part.get("quantity") and part.get("unit_price")
+                    part_needs_review = not has_all_fields
                     
-                    # Créer nouvelle pièce
+                    # Create NEW part record
                     part_doc = {
                         "user_id": current_user.id,
                         "aircraft_id": aircraft_id,
                         "part_number": part_number,
                         "name": part_description or part_number or "Unknown Part",
                         "serial_number": part.get("serial_number"),
-                        "quantity": part.get("quantity"),  # Can be None - user validates
-                        "purchase_price": part.get("price") or part.get("line_total") or part.get("unit_price"),
+                        "quantity": part.get("quantity"),
+                        "purchase_price": part.get("unit_price") or part.get("line_total"),
                         "supplier": vendor_name,
                         "manufacturer": part.get("manufacturer"),
                         "invoice_id": applied_ids.get("invoice_id"),
-                        "installed_on_aircraft": False,  # Facture = achat, pas encore installé
+                        "installed_on_aircraft": False,  # Invoice = purchase, not installed
                         "source": "ocr_invoice",
                         "ocr_scan_id": scan_id,
                         "confirmed": False,
-                        "needs_review": needs_review,
+                        "needs_review": part_needs_review,
                         "created_at": now,
                         "updated_at": now
                     }
                     
                     result = await db.part_records.insert_one(part_doc)
                     applied_ids["part_ids"].append(str(result.inserted_id))
-                    logger.info(f"✅ Created part {part_number or part_description} from invoice (needs_review={needs_review})")
+                    created_count += 1
+                    logger.info(f"✅ Created part {part_number or part_description} from invoice")
             
-            logger.info(f"Created {len(applied_ids['part_ids'])} parts from invoice")
+            # FINAL LOG: OCR INVOICE PARTS with actual CREATED count
+            logger.info(
+                f"OCR INVOICE PARTS RAW={len(raw_parts)} "
+                f"NORMALIZED={len(normalized_parts)} "
+                f"DEDUPED={len(deduped_parts)} "
+                f"CREATED={created_count}"
+            )
         
         # Update OCR scan status to APPLIED
         await db.ocr_scans.update_one(
