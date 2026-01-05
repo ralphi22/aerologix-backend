@@ -1247,8 +1247,8 @@ async def apply_ocr_results(
             # Use deduped_parts as invoice_parts for creation
             invoice_parts = deduped_parts
             
-            # LOG: INVOICE PART DEDUPE (REQUIRED FORMAT)
-            logger.info(f"INVOICE PART DEDUPE | before={len(invoice_parts_raw)} after={len(deduped_parts)}")
+            # LOG: PART DEDUP FINAL (REQUIRED FORMAT)
+            logger.info(f"PART DEDUP FINAL | before={len(invoice_parts_raw)} | after={len(deduped_parts)}")
             
             has_parts = len(invoice_parts) > 0
             
