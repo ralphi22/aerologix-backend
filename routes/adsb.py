@@ -64,7 +64,7 @@ async def get_adsb_records(
     current_user: User = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """Get all AD/SB records for an aircraft"""
+    """Get all AD/SB records for an aircraft - READS DIRECTLY FROM DB"""
     
     # Verify aircraft belongs to user
     aircraft = await db.aircrafts.find_one({
@@ -89,6 +89,7 @@ async def get_adsb_records(
     if status_filter:
         query["status"] = status_filter.upper()
     
+    # DIRECT DB READ - NO CACHE, NO OCR RECONSTRUCTION
     cursor = db.adsb_records.find(query).sort("created_at", -1)
     
     records = []
@@ -96,6 +97,8 @@ async def get_adsb_records(
         record["_id"] = str(record["_id"])
         records.append(record)
     
+    # LOG: GET adsb count
+    logger.info(f"GET adsb | aircraft={aircraft_id} | count={len(records)}")
     return records
 
 
