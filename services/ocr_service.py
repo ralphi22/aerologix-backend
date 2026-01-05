@@ -313,20 +313,20 @@ class OCRService:
     
     def _normalize_parts(self, data: Dict[str, Any], document_type: str) -> Dict[str, Any]:
         """
-        Normalize parts data to ensure both 'parts' and 'parts_replaced' keys exist.
-        Searches multiple possible keys (EN and FR) and normalizes the result.
+        Normalize parts data - USE SINGLE SOURCE to prevent duplication.
+        For invoices: prefer 'parts', fallback to 'parts_replaced'
         """
-        # Search for parts in this priority order
+        # Search for parts in this priority order - USE FIRST FOUND ONLY
         normalized_parts = None
         source_key = None
         
         for key in ["parts", "pièces", "pieces", "parts_replaced", "pièces_remplacées", "pieces_remplacees"]:
-            if key in data and data[key]:
+            if key in data and data[key] and len(data[key]) > 0:
                 normalized_parts = data[key]
                 source_key = key
-                break
+                break  # STOP at first found - don't concatenate
         
-        # If no parts found, set empty lists
+        # If no parts found, set empty list
         if normalized_parts is None:
             normalized_parts = []
         
@@ -361,16 +361,14 @@ class OCRService:
                     converted_parts.append(item)
             normalized_parts = converted_parts
         
-        # Write to BOTH keys for compatibility with APPLY logic
+        # Write SAME data to both keys (for backward compat) - NOT DUPLICATED
         data["parts"] = normalized_parts
-        data["parts_replaced"] = normalized_parts  # Duplicate volontaire pour compat
+        data["parts_replaced"] = normalized_parts  # Same reference, not concatenated
         
         # Log parts normalization
         logger.info(
             f"OCR PARTS NORMALIZED | doc_type={document_type} | "
-            f"source_key={source_key} | "
-            f"parts_len={len(data.get('parts', []))} | "
-            f"parts_replaced_len={len(data.get('parts_replaced', []))}"
+            f"source_key={source_key} | count={len(normalized_parts)}"
         )
         
         return data
