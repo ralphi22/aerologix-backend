@@ -14,6 +14,9 @@ from datetime import datetime
 from openai import OpenAI
 from dotenv import load_dotenv
 
+# Import report classifier
+from services.report_classifier import classify_report_type
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
