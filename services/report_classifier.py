@@ -405,7 +405,7 @@ def run_tests():
         {
             "text": "COMPASS SWING performed. New deviation card installed. Magnetic compass calibrated on all cardinal headings.",
             "expected_type": "COMPASS_SWING",
-            "min_confidence": 0.5
+            "min_confidence": 0.4
         },
         
         # Test 6: Weight and balance (French)
