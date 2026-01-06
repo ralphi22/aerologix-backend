@@ -127,6 +127,9 @@ class ExtractedMaintenanceData(BaseModel):
     
     # ELT data
     elt_data: Optional[ExtractedELTData] = None
+    
+    # Report type classification (TC-SAFE: suggestion only, requires user confirmation)
+    report_classification: Optional[ReportClassification] = None
 
 class OCRScanBase(BaseModel):
     aircraft_id: str
