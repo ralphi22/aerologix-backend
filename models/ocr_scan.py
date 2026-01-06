@@ -3,6 +3,51 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 
+
+# ============== REPORT TYPE CLASSIFICATION ==============
+
+class ReportTypeEnum(str, Enum):
+    """Suggested report types from classifier (TC-SAFE: suggestion only)"""
+    INSPECTION_APP_B = "INSPECTION_APP_B"
+    ELEMENTARY_WORK_APP_C = "ELEMENTARY_WORK_APP_C"
+    AVIONICS_24_MONTH = "AVIONICS_24_MONTH"
+    ELT_INSPECTION = "ELT_INSPECTION"
+    COMPASS_SWING = "COMPASS_SWING"
+    WEIGHT_AND_BALANCE = "WEIGHT_AND_BALANCE"
+    STC_MODIFICATION = "STC_MODIFICATION"
+    REPAIR = "REPAIR"
+    COMPONENT_OVERHAUL = "COMPONENT_OVERHAUL"
+    UNKNOWN = "UNKNOWN"
+
+
+class PatternEvidence(BaseModel):
+    """Evidence for a pattern match"""
+    pattern: str
+    snippet: str
+
+
+class SecondaryCandidate(BaseModel):
+    """Alternative report type candidate"""
+    type: str
+    score: float
+    confidence: float
+
+
+class ReportClassification(BaseModel):
+    """
+    TC-SAFE: Report type classification result.
+    This is a SUGGESTION only - requires user confirmation.
+    Does NOT indicate compliance or airworthiness.
+    """
+    suggested_report_type: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    evidence: List[PatternEvidence] = []
+    secondary_candidates: List[SecondaryCandidate] = []
+    warnings: List[str] = []
+
+
+# ============== DOCUMENT TYPES ==============
+
 class DocumentType(str, Enum):
     MAINTENANCE_REPORT = "maintenance_report"
     STC = "stc"
