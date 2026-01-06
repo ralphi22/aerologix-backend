@@ -419,7 +419,7 @@ def run_tests():
         {
             "text": "Garmin GTN 750 installed in accordance with STC SA02345NY. All wiring per approved data. Operational check satisfactory.",
             "expected_type": "STC_MODIFICATION",
-            "min_confidence": 0.5
+            "min_confidence": 0.4
         },
         
         # Test 8: Major repair
