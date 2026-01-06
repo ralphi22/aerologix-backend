@@ -450,6 +450,25 @@ class OCRService:
                 document_type
             )
             
+            # ============================================================
+            # REPORT TYPE CLASSIFICATION (TC-SAFE: Suggestion only)
+            # ============================================================
+            try:
+                # Classify report type from raw OCR text
+                classification_result = classify_report_type(raw_response)
+                
+                # Add classification to structured data (as optional field)
+                structured_data["report_classification"] = classification_result.to_dict()
+                
+                logger.info(
+                    f"OCR CLASSIFICATION ADDED | type={classification_result.suggested_report_type} | "
+                    f"confidence={classification_result.confidence:.2f}"
+                )
+            except Exception as class_error:
+                logger.warning(f"Report classification failed (non-blocking): {class_error}")
+                # Classification failure should not block OCR - just skip it
+                structured_data["report_classification"] = None
+            
             return {
                 "success": True,
                 "raw_text": raw_response,
