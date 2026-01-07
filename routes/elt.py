@@ -113,7 +113,7 @@ async def get_aircraft_elt(
     current_user: User = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """Get ELT record for an aircraft"""
+    """Get ELT record for an aircraft. Returns null if no ELT data exists."""
     
     # Verify aircraft belongs to user
     aircraft = await db.aircrafts.find_one({
@@ -134,10 +134,13 @@ async def get_aircraft_elt(
     })
     
     if not elt:
+        logger.info(f"ELT GET | aircraft={aircraft_id} | user={current_user.id} | result=not_found")
         return None
     
     # Compute alerts
     elt_status, alerts = compute_elt_alerts(elt)
+    
+    logger.info(f"ELT GET | aircraft={aircraft_id} | user={current_user.id} | result=found | brand={elt.get('brand')} | model={elt.get('model')}")
     
     return ELTResponse(
         _id=str(elt["_id"]),
