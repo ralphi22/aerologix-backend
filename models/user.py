@@ -9,12 +9,12 @@ class PlanTier(str, Enum):
     MAINTENANCE_PRO = "MAINTENANCE_PRO"
     FLEET_AI = "FLEET_AI"
 
-# OCR limits per plan (monthly)
+# OCR limits per plan (monthly) - FREE LAUNCH PERIOD
 OCR_LIMITS_BY_PLAN = {
-    PlanTier.BASIC: 25,           # Free: 25 scans/month (increased for testing)
-    PlanTier.PILOT: 25,           # Basic: 25 scans/month
+    PlanTier.BASIC: 10,            # Free launch: 10 scans/month
+    PlanTier.PILOT: 25,            # Basic: 25 scans/month
     PlanTier.MAINTENANCE_PRO: 100, # Pro: 100 scans/month
-    PlanTier.FLEET_AI: 500,       # Premium: 500 scans/month
+    PlanTier.FLEET_AI: 500,        # Premium: 500 scans/month
 }
 
 class UserSubscription(BaseModel):
