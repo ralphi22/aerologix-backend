@@ -258,7 +258,11 @@ async def update_elt(
     current_user: User = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """Update ELT record for an aircraft"""
+    """
+    Update or Create (UPSERT) ELT record for an aircraft.
+    If no ELT record exists, one will be created.
+    Only provided fields are updated; existing values are preserved.
+    """
     
     # Verify aircraft belongs to user
     aircraft = await db.aircrafts.find_one({
@@ -272,42 +276,75 @@ async def update_elt(
             detail="Aircraft not found"
         )
     
-    # Get existing ELT
+    # Get existing ELT (may not exist)
     existing = await db.elt_records.find_one({
         "aircraft_id": aircraft_id,
         "user_id": current_user.id
     })
     
-    if not existing:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="ELT record not found. Use POST to create."
-        )
-    
-    # Build update dict with date parsing
-    update_dict = {"updated_at": datetime.utcnow()}
+    now = datetime.utcnow()
     date_fields = ["installation_date", "certification_date", "last_test_date", 
                    "battery_expiry_date", "battery_install_date"]
     
-    for field, value in elt_update.dict(exclude_unset=True).items():
-        if value is not None:
-            if field in date_fields:
-                update_dict[field] = parse_date_string(value)
-            else:
-                update_dict[field] = value
-    
-    await db.elt_records.update_one(
-        {"_id": existing["_id"]},
-        {"$set": update_dict}
-    )
-    
-    # Get updated record
-    updated = await db.elt_records.find_one({"_id": existing["_id"]})
+    if existing:
+        # UPDATE: Build update dict with only provided fields
+        update_dict = {"updated_at": now}
+        
+        for field, value in elt_update.dict(exclude_unset=True).items():
+            if value is not None:
+                if field in date_fields:
+                    update_dict[field] = parse_date_string(value)
+                else:
+                    update_dict[field] = value
+        
+        await db.elt_records.update_one(
+            {"_id": existing["_id"]},
+            {"$set": update_dict}
+        )
+        
+        # Get updated record
+        updated = await db.elt_records.find_one({"_id": existing["_id"]})
+        
+        logger.info(f"ELT UPDATE | aircraft={aircraft_id} | user={current_user.id} | fields_updated={list(update_dict.keys())}")
+    else:
+        # CREATE: New ELT record with provided fields
+        elt_doc = {
+            "user_id": current_user.id,
+            "aircraft_id": aircraft_id,
+            "brand": None,
+            "model": None,
+            "serial_number": None,
+            "installation_date": None,
+            "certification_date": None,
+            "last_test_date": None,
+            "battery_expiry_date": None,
+            "battery_install_date": None,
+            "battery_interval_months": None,
+            "beacon_hex_id": None,
+            "registration_number": None,
+            "remarks": None,
+            "source": "manual",
+            "ocr_scan_id": None,
+            "created_at": now,
+            "updated_at": now
+        }
+        
+        # Apply provided fields
+        for field, value in elt_update.dict(exclude_unset=True).items():
+            if value is not None:
+                if field in date_fields:
+                    elt_doc[field] = parse_date_string(value)
+                else:
+                    elt_doc[field] = value
+        
+        result = await db.elt_records.insert_one(elt_doc)
+        elt_doc["_id"] = result.inserted_id
+        updated = elt_doc
+        
+        logger.info(f"ELT CREATE (via PUT) | aircraft={aircraft_id} | user={current_user.id}")
     
     # Compute alerts
     elt_status, alerts = compute_elt_alerts(updated)
-    
-    logger.info(f"Updated ELT record for aircraft {aircraft_id}")
     
     return ELTResponse(
         _id=str(updated["_id"]),
