@@ -399,7 +399,7 @@ async def scan_document(
         logger.warning(f"OCR limit reached for user {current_user.id}: {scans_used}/{ocr_limit}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Limite de scans atteinte pour votre forfait"
+            detail="OCR limit reached for free launch period"
         )
     
     # Create OCR scan record
