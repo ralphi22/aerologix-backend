@@ -288,8 +288,8 @@ def parse_carsownr(filepath: Path, limit: Optional[int] = None) -> Dict[str, Lis
             if not mark:
                 continue
             
-            # Parse owner name
-            name_info = parse_owner_name(fields[1], fields[17])
+            # Parse owner name (pass owner_type for company detection)
+            name_info = parse_owner_name(fields[1], fields[17], fields[11])
             
             owner = {
                 "full_name": name_info["full_name"],
