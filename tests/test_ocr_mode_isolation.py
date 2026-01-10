@@ -162,7 +162,7 @@ class TestOCRModeIsolation:
         assert invoice_id is not None
         
         # Check invoice has line_items stored
-        invoice = db_client.invoices.find_one({"_id": invoice_id})
+        invoice = get_invoice_by_id(db_client, invoice_id)
         assert invoice is not None, "Invoice should exist"
         assert "line_items" in invoice, "Invoice should have line_items field"
         assert len(invoice["line_items"]) == 3, f"Expected 3 line_items, got {len(invoice['line_items'])}"
