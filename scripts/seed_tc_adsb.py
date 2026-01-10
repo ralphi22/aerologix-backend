@@ -158,14 +158,14 @@ SAMPLE_SBS = [
 async def seed_tc_adsb():
     """Seed TC AD/SB collections"""
     
-    mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
-    db_name = os.environ.get("DB_NAME", "aerologix")
-    
-    client = AsyncIOMotorClient(mongo_url)
-    db = client[db_name]
+    # Use same MongoDB connection as FastAPI
+    settings = get_settings()
+    client = AsyncIOMotorClient(settings.mongo_url)
+    db = client[settings.db_name]
     
     print("=" * 60)
     print("SEEDING TC AD/SB COLLECTIONS")
+    print(f"Database: {settings.db_name}")
     print("=" * 60)
     
     now = datetime.utcnow()
