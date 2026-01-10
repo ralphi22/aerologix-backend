@@ -41,11 +41,11 @@ class RecurrenceType(str, Enum):
 
 class ComparisonStatus(str, Enum):
     """Status of comparison (TC-SAFE: never compliance)"""
-    FOUND = "found"                 # Item exists in aircraft records
-    MISSING = "missing"             # Item not found in aircraft records
-    NEW_REGULATORY = "new"          # New TC item since last logbook entry
-    RECURRENCE_DUE = "recurrence_due"  # Recurring item may be due
-    INFO_ONLY = "info_only"         # Informational only
+    OK = "OK"                       # Item found, not due
+    DUE_SOON = "DUE_SOON"           # Item found, recurrence coming up (< 90 days or < 50 hours)
+    MISSING = "MISSING"             # Item not found in aircraft records
+    NEW_REGULATORY = "NEW"          # New TC item since last logbook entry
+    INFO_ONLY = "INFO_ONLY"         # Informational only (OCR item not in TC)
 
 
 # ============================================================
