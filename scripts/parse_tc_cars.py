@@ -132,20 +132,30 @@ def parse_date(date_str: str) -> Optional[str]:
         return None
 
 
-def parse_owner_name(full_name: str, old_format: str) -> Dict[str, str]:
+def parse_owner_name(full_name: str, old_format: str, owner_type: str = "") -> Dict[str, str]:
     """
     Parse owner name into given_name and family_name.
     
     Uses OWNER_NAME_OLD_FORMAT which is "Lastname,Firstname Initials"
     Falls back to FULL_NAME if old_format is not usable.
+    
+    For Entity/Company owners, family_name contains the company name.
     """
     result = {
         "given_name": "",
         "family_name": "",
-        "full_name": clean_value(full_name)
+        "full_name": clean_value(full_name),
+        "is_company": False
     }
     
+    owner_type = clean_value(owner_type).lower()
     old_format = clean_value(old_format)
+    
+    # Check if this is a company/entity
+    if owner_type in ["entity", "une personne morale", "company", "manufacturer"]:
+        result["is_company"] = True
+        result["family_name"] = result["full_name"]  # Company name goes in family_name
+        return result
     
     if old_format and "," in old_format:
         # Format: "Lastname,Firstname Initials"
