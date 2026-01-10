@@ -295,6 +295,7 @@ def parse_carsownr(filepath: Path, limit: Optional[int] = None) -> Dict[str, Lis
                 "full_name": name_info["full_name"],
                 "given_name": name_info["given_name"],
                 "family_name": name_info["family_name"],
+                "is_company": name_info["is_company"],
                 "trade_name": clean_value(fields[2]),
                 "street": clean_value(fields[3]),
                 "city": clean_value(fields[5]),
