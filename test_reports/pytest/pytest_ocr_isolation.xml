@@ -1,26 +1,9 @@
-<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="8" skipped="0" tests="8" time="0.502" timestamp="2026-01-10T21:33:52.375168+00:00" hostname="agent-env-b56b085a-57fe-4b74-91de-b0674408ab03"><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_invoice_scan_creates_only_invoice_record" time="0.347"><failure message="AssertionError: Apply failed: {&quot;detail&quot;:&quot;Seuls les scans complétés peuvent être appliqués&quot;}&#10;assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_ocr_mode_isolation.py:85: in test_invoice_scan_creates_only_invoice_record
-    assert response.status_code == 200, f"Apply failed: {response.text}"
-E   AssertionError: Apply failed: {"detail":"Seuls les scans complétés peuvent être appliqués"}
-E   assert 400 == 200
-E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_invoice_with_parts_list_does_not_create_part_records" time="0.005"><failure message="assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_ocr_mode_isolation.py:154: in test_invoice_with_parts_list_does_not_create_part_records
-    assert response.status_code == 200
-E   assert 400 == 200
-E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_invoice_does_not_update_aircraft_hours" time="0.004"><failure message="assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_ocr_mode_isolation.py:212: in test_invoice_does_not_update_aircraft_hours
-    assert response.status_code == 200
-E   assert 400 == 200
-E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_invoice_stores_financial_data" time="0.004"><failure message="assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_ocr_mode_isolation.py:262: in test_invoice_stores_financial_data
-    assert response.status_code == 200
-E   assert 400 == 200
-E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_invoice_stores_line_items_as_reference" time="0.003"><failure message="assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_ocr_mode_isolation.py:313: in test_invoice_stores_line_items_as_reference
-    assert response.status_code == 200
-E   assert 400 == 200
-E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_report_scan_creates_parts_and_components" time="0.004"><failure message="assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_ocr_mode_isolation.py:375: in test_report_scan_creates_parts_and_components
-    assert response.status_code == 200
-E   assert 400 == 200
-E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_ocr_apply_response_includes_mode_field" time="0.003"><failure message="assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_ocr_mode_isolation.py:421: in test_ocr_apply_response_includes_mode_field
-    assert response.status_code == 200
-E   assert 400 == 200
-E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_ocr_apply_response_shows_parts_created_zero_for_invoices" time="0.004"><failure message="assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_ocr_mode_isolation.py:469: in test_ocr_apply_response_shows_parts_created_zero_for_invoices
-    assert response.status_code == 200
-E   assert 400 == 200
-E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase></testsuite></testsuites>
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="8" time="0.550" timestamp="2026-01-10T21:34:10.071073+00:00" hostname="agent-env-b56b085a-57fe-4b74-91de-b0674408ab03"><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_invoice_scan_creates_only_invoice_record" time="0.366" /><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_invoice_with_parts_list_does_not_create_part_records" time="0.007"><failure message="AssertionError: Invoice should exist&#10;assert None is not None">tests/test_ocr_mode_isolation.py:166: in test_invoice_with_parts_list_does_not_create_part_records
+    assert invoice is not None, "Invoice should exist"
+E   AssertionError: Invoice should exist
+E   assert None is not None</failure></testcase><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_invoice_does_not_update_aircraft_hours" time="0.008" /><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_invoice_stores_financial_data" time="0.006"><failure message="assert None is not None">tests/test_ocr_mode_isolation.py:270: in test_invoice_stores_financial_data
+    assert invoice is not None
+E   assert None is not None</failure></testcase><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_invoice_stores_line_items_as_reference" time="0.007"><failure message="TypeError: argument of type 'NoneType' is not iterable">tests/test_ocr_mode_isolation.py:320: in test_invoice_stores_line_items_as_reference
+    assert "line_items" in invoice
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: argument of type 'NoneType' is not iterable</failure></testcase><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_report_scan_creates_parts_and_components" time="0.031" /><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_ocr_apply_response_includes_mode_field" time="0.010" /><testcase classname="tests.test_ocr_mode_isolation.TestOCRModeIsolation" name="test_ocr_apply_response_shows_parts_created_zero_for_invoices" time="0.007" /></testsuite></testsuites>
