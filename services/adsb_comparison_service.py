@@ -414,7 +414,7 @@ class ADSBComparisonService:
             if isinstance(recurrence_type, str):
                 recurrence_type = RecurrenceType(recurrence_type)
             
-            next_due = self.calculate_next_due(
+            next_due, next_due_dt = self.calculate_next_due(
                 recurrence_type,
                 tc_req.get("recurrence_value"),
                 last_compliance_dt,
@@ -425,7 +425,7 @@ class ADSBComparisonService:
             effective_date = tc_req.get("effective_date")
             status = self.determine_status(
                 found, recurrence_type, next_due,
-                effective_date, last_logbook_date
+                effective_date, last_logbook_date, next_due_dt
             )
             
             # Track counts
