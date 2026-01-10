@@ -558,5 +558,22 @@ def db_client():
     client.close()
 
 
+def get_invoice_by_id(db, invoice_id: str):
+    """Helper to get invoice by ID (handles ObjectId conversion)"""
+    from bson import ObjectId
+    
+    # Try string ID first
+    invoice = db.invoices.find_one({"_id": invoice_id})
+    if invoice:
+        return invoice
+    
+    # Try ObjectId
+    try:
+        invoice = db.invoices.find_one({"_id": ObjectId(invoice_id)})
+        return invoice
+    except:
+        return None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
