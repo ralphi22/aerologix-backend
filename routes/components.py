@@ -175,3 +175,172 @@ async def get_regulations():
             "Transport Canada Standard 625"
         ]
     }
+
+
+# ============================================================
+# CRITICAL COMPONENTS API - OCR-detected component lifecycle
+# ============================================================
+
+@router.get("/critical/{aircraft_id}", response_model=CriticalComponentsResponse)
+async def get_critical_components(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db = Depends(get_database)
+):
+    """
+    Get critical components for an aircraft with time-since-install calculations.
+    
+    Returns installed components detected from OCR scans with:
+    - installed_at_hours: When the component was installed
+    - current_airframe_hours: Current aircraft hours
+    - time_since_install: Hours since installation
+    - tbo: Time Between Overhaul (if known)
+    - remaining: Hours remaining until TBO
+    - status: OK, WARNING (< 100h remaining), CRITICAL (< 50h), or UNKNOWN
+    
+    INFORMATIONAL ONLY - Always verify with AME and official records.
+    """
+    logger.info(f"Getting critical components for aircraft_id={aircraft_id}, user_id={current_user.id}")
+    
+    # Verify aircraft belongs to user
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        logger.warning(f"Aircraft {aircraft_id} not found for user {current_user.id}")
+        raise HTTPException(status_code=404, detail="Aircraft not found")
+    
+    # Get current airframe hours
+    current_airframe_hours = aircraft.get("airframe_hours", 0.0)
+    registration = aircraft.get("registration")
+    
+    # Fetch installed components from DB
+    components_cursor = db.installed_components.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id
+    }).sort("installed_at_hours", -1)  # Most recent first
+    
+    components_list: List[CriticalComponentResponse] = []
+    last_updated: Optional[datetime] = None
+    
+    async for comp in components_cursor:
+        comp_type_str = comp.get("component_type", "")
+        part_no = comp.get("part_no", "UNKNOWN")
+        installed_at_hours = comp.get("installed_at_hours", 0.0)
+        installed_date = comp.get("installed_date")
+        tbo = comp.get("tbo")
+        confidence = comp.get("confidence", 0.5)
+        
+        # Track last updated
+        comp_updated = comp.get("updated_at") or comp.get("created_at")
+        if comp_updated and (last_updated is None or comp_updated > last_updated):
+            last_updated = comp_updated
+        
+        # Calculate time since install
+        time_since_install = max(0.0, current_airframe_hours - installed_at_hours)
+        
+        # Calculate remaining hours until TBO
+        remaining: Optional[float] = None
+        status = "UNKNOWN"
+        
+        if tbo is not None and tbo > 0:
+            remaining = max(0.0, tbo - time_since_install)
+            
+            # Determine status based on remaining hours
+            if remaining <= 0:
+                status = "OVERDUE"
+            elif remaining < 50:
+                status = "CRITICAL"
+            elif remaining < 100:
+                status = "WARNING"
+            else:
+                status = "OK"
+        elif tbo is None:
+            # No TBO defined - component is likely on-condition
+            status = "ON_CONDITION"
+        
+        # Parse component type
+        try:
+            comp_type = ComponentType(comp_type_str)
+        except ValueError:
+            comp_type = ComponentType.LLP  # Default to LLP for unknown types
+        
+        # Format installed_date as string
+        installed_date_str: Optional[str] = None
+        if installed_date:
+            if isinstance(installed_date, datetime):
+                installed_date_str = installed_date.strftime("%Y-%m-%d")
+            elif isinstance(installed_date, str):
+                installed_date_str = installed_date
+        
+        components_list.append(CriticalComponentResponse(
+            component_type=comp_type,
+            part_no=part_no,
+            serial_no=comp.get("serial_no"),
+            description=comp.get("description"),
+            installed_at_hours=round(installed_at_hours, 1),
+            installed_date=installed_date_str,
+            current_airframe_hours=round(current_airframe_hours, 1),
+            time_since_install=round(time_since_install, 1),
+            tbo=tbo,
+            remaining=round(remaining, 1) if remaining is not None else None,
+            status=status,
+            confidence=confidence
+        ))
+    
+    logger.info(f"Found {len(components_list)} critical components for aircraft {aircraft_id}")
+    
+    return CriticalComponentsResponse(
+        aircraft_id=aircraft_id,
+        registration=registration,
+        current_airframe_hours=round(current_airframe_hours, 1),
+        components=components_list,
+        last_updated=last_updated
+    )
+
+
+@router.post("/critical/{aircraft_id}/reprocess")
+async def reprocess_aircraft_components(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db = Depends(get_database)
+):
+    """
+    Reprocess all OCR history for an aircraft to extract/update critical components.
+    
+    Use this when:
+    - OCR intelligence was added after scans were already processed
+    - You want to refresh component data from existing OCR history
+    
+    Returns count of components created/updated.
+    """
+    logger.info(f"Reprocessing components for aircraft_id={aircraft_id}, user_id={current_user.id}")
+    
+    # Verify aircraft belongs to user
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(status_code=404, detail="Aircraft not found")
+    
+    # Import the intelligence service
+    from services.ocr_intelligence import OCRIntelligenceService
+    
+    intelligence = OCRIntelligenceService(db)
+    
+    # Reprocess all OCR history
+    total_created = await intelligence.reprocess_aircraft_history(
+        aircraft_id=aircraft_id,
+        user_id=current_user.id
+    )
+    
+    logger.info(f"Reprocessed components for aircraft {aircraft_id}: {total_created} components created")
+    
+    return {
+        "message": f"Reprocessed OCR history for aircraft {aircraft_id}",
+        "components_created": total_created
+    }
