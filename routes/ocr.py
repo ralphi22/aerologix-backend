@@ -141,13 +141,33 @@ def serialize_mongo_doc(doc: Dict) -> Dict:
 
 
 def get_ocr_limit_for_plan(plan: str) -> int:
-    """Get OCR limit based on user's subscription plan"""
+    """
+    DEPRECATED: Use user_doc.get("limits", {}).get("ocr_per_month", 5) instead.
+    
+    Get OCR limit based on user's subscription plan.
+    Kept for backward compatibility.
+    """
     try:
         plan_tier = PlanTier(plan.upper()) if plan else PlanTier.BASIC
     except ValueError:
         plan_tier = PlanTier.BASIC
     
     return OCR_LIMITS_BY_PLAN.get(plan_tier, 5)
+
+
+def get_ocr_limit_from_user(user_doc: dict) -> int:
+    """
+    Get OCR limit directly from user's limits (computed from plan_code).
+    This is the preferred method.
+    """
+    limits = user_doc.get("limits", {})
+    ocr_limit = limits.get("ocr_per_month", 5)
+    
+    # -1 means unlimited
+    if ocr_limit == -1:
+        return 999999  # Effectively unlimited
+    
+    return ocr_limit
 
 
 async def check_and_reset_ocr_usage(db, user_id: str, user_doc: dict) -> dict:
