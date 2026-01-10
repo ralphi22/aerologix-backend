@@ -145,12 +145,12 @@ class ADSBComparisonService:
                 "record_date": record.get("created_at")
             })
             
-            # Update last date if manual record is more recent
+            # Update effective date if manual record is more recent
             record_date = record.get("created_at")
-            if record_date and (last_scan_date is None or record_date > last_scan_date):
-                last_scan_date = record_date
+            if record_date and (effective_date is None or record_date > effective_date):
+                effective_date = record_date
         
-        return adsb_records, last_scan_date
+        return adsb_records, effective_date
     
     async def get_tc_requirements(
         self,
