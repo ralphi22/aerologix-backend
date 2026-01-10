@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 
 COLLECTION_NAME = "tc_aeronefs"
 
-# Index definitions
+# Index definitions (PRIVACY COMPLIANT - no province/category indexes)
 INDEXES = [
     {
         "keys": [("registration", 1)],
@@ -73,14 +73,6 @@ INDEXES = [
     {
         "keys": [("tc_version", 1)],
         "name": "tc_version_idx"
-    },
-    {
-        "keys": [("first_owner_province", 1)],
-        "name": "province_idx"
-    },
-    {
-        "keys": [("category", 1)],
-        "name": "category_idx"
     },
 ]
 
