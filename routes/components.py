@@ -259,7 +259,7 @@ async def get_critical_components(
                 comp_status = "OK"
         elif tbo is None:
             # No TBO defined - component is likely on-condition
-            status = "ON_CONDITION"
+            comp_status = "ON_CONDITION"
         
         # Parse component type
         try:
@@ -286,7 +286,7 @@ async def get_critical_components(
             time_since_install=round(time_since_install, 1),
             tbo=tbo,
             remaining=round(remaining, 1) if remaining is not None else None,
-            status=status,
+            status=comp_status,
             confidence=confidence
         ))
     
