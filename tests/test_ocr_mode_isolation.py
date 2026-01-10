@@ -226,7 +226,7 @@ class TestOCRModeIsolation:
         # Cleanup
         db_client.ocr_scans.delete_one({"_id": scan_id})
         if data["applied"].get("invoice_id"):
-            db_client.invoices.delete_one({"_id": data["applied"]["invoice_id"]})
+            delete_invoice_by_id(db_client, data["applied"]["invoice_id"])
         
         print("✅ PASS: Invoice does NOT update aircraft hours")
     
@@ -476,7 +476,7 @@ class TestOCRModeIsolation:
         # Cleanup
         db_client.ocr_scans.delete_one({"_id": scan_id})
         if data["applied"].get("invoice_id"):
-            db_client.invoices.delete_one({"_id": data["applied"]["invoice_id"]})
+            delete_invoice_by_id(db_client, data["applied"]["invoice_id"])
         
         print("✅ PASS: OCR apply response shows parts_created=0 for invoices")
     
