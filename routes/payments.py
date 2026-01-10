@@ -1,25 +1,27 @@
 """
-Payments Routes - Stripe subscription management
+Payments Routes - Stripe subscription management (UNIFIED PLAN_CODE)
+
+This module uses the unified plan_code system:
+- BASIC: Free tier
+- PILOT: $24/mo
+- PILOT_PRO: $39/mo
+- FLEET: $65/mo
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
+from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime
+from typing import Optional
 import logging
 
 from database.mongodb import get_database
 from services.auth_deps import get_current_user
 from models.user import User
-from models.subscription import (
-    CheckoutSessionRequest,
-    CheckoutSessionResponse,
-    PortalSessionResponse,
-    SubscriptionResponse,
-    Subscription,
-    PlanType,
-    SubscriptionStatus,
-    BillingCycle,
-    PLAN_LIMITS
+from models.plans import (
+    PlanCode, BillingCycle, PlanLimits, PlanDefinition,
+    PLAN_DEFINITIONS, get_plan_definition, get_plan_limits,
+    compute_limits, get_basic_limits, normalize_plan_code
 )
 from services import stripe_service
 from config import get_settings
@@ -29,11 +31,105 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+# ============================================================
+# REQUEST/RESPONSE MODELS
+# ============================================================
+
+class CheckoutSessionRequest(BaseModel):
+    """Request for creating checkout session"""
+    plan_code: PlanCode  # NEW: Uses PlanCode enum
+    billing_cycle: BillingCycle
+
+
+class CheckoutSessionResponse(BaseModel):
+    """Response with checkout URL"""
+    checkout_url: str
+    session_id: str
+
+
+class PortalSessionResponse(BaseModel):
+    """Response with customer portal URL"""
+    portal_url: str
+
+
+class SubscriptionStatus(str):
+    ACTIVE = "active"
+    CANCELED = "canceled"
+    PAST_DUE = "past_due"
+    TRIALING = "trialing"
+    INCOMPLETE = "incomplete"
+
+
+class SubscriptionInfo(BaseModel):
+    """Subscription info for API response"""
+    id: str
+    user_id: str
+    plan_code: PlanCode
+    billing_cycle: BillingCycle
+    status: str
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+    current_period_start: Optional[datetime] = None
+    current_period_end: Optional[datetime] = None
+    cancel_at_period_end: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class SubscriptionResponse(BaseModel):
+    """Response for subscription endpoint"""
+    has_subscription: bool
+    subscription: Optional[SubscriptionInfo] = None
+    plan_limits: dict
+    plan_definition: Optional[dict] = None
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
 def generate_id():
     """Generate unique ID"""
     import time
     return str(int(time.time() * 1000000))
 
+
+async def update_user_plan_and_limits(db, user_id: str, plan_code: str):
+    """
+    Update user's plan_code and limits in MongoDB.
+    This is the SINGLE function to use for all plan changes.
+    """
+    limits = compute_limits(plan_code)
+    now = datetime.utcnow()
+    
+    await db.users.update_one(
+        {"_id": user_id},
+        {"$set": {
+            "subscription.plan_code": plan_code,
+            "subscription.status": "active",
+            "limits.max_aircrafts": limits["max_aircrafts"],
+            "limits.ocr_per_month": limits["ocr_per_month"],
+            "limits.gps_logbook": limits["gps_logbook"],
+            "limits.tea_amo_sharing": limits["tea_amo_sharing"],
+            "limits.invoices": limits["invoices"],
+            "limits.cost_per_hour": limits["cost_per_hour"],
+            "limits.prebuy": limits.get("prebuy", False),
+            "updated_at": now
+        }}
+    )
+    
+    logger.info(f"Updated user {user_id} to plan_code={plan_code} with limits={limits}")
+
+
+async def reset_user_to_basic(db, user_id: str):
+    """Reset user to BASIC plan with BASIC limits"""
+    await update_user_plan_and_limits(db, user_id, PlanCode.BASIC.value)
+    logger.info(f"Reset user {user_id} to BASIC plan")
+
+
+# ============================================================
+# ENDPOINTS
+# ============================================================
 
 @router.post("/create-checkout-session", response_model=CheckoutSessionResponse)
 async def create_checkout_session(
@@ -43,11 +139,20 @@ async def create_checkout_session(
 ):
     """
     Create a Stripe Checkout session for subscription.
+    
+    Uses plan_code (PILOT, PILOT_PRO, FLEET) - not legacy solo/pro/fleet.
     """
+    # Validate plan_code is not BASIC (free plan can't be purchased)
+    if request.plan_code == PlanCode.BASIC:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le plan BASIC est gratuit et ne nécessite pas d'abonnement."
+        )
+    
     # Check if user already has an active subscription
     existing = await db.subscriptions.find_one({
         "user_id": current_user.id,
-        "status": {"$in": [SubscriptionStatus.ACTIVE.value, SubscriptionStatus.TRIALING.value]}
+        "status": {"$in": ["active", "trialing"]}
     })
     
     if existing:
@@ -56,11 +161,18 @@ async def create_checkout_session(
             detail="Vous avez déjà un abonnement actif. Gérez-le depuis le portail client."
         )
     
-    # Get price ID
-    price_id = settings.get_stripe_price_id(request.plan_id.value, request.billing_cycle.value)
-    if not price_id or price_id.startswith("price_"):
-        # Placeholder price - use test mode
-        logger.warning(f"Using placeholder price ID for {request.plan_id}/{request.billing_cycle}")
+    # Get price ID from config
+    price_id = settings.get_stripe_price_id(
+        request.plan_code.value, 
+        request.billing_cycle.value
+    )
+    
+    if not price_id:
+        logger.error(f"No Stripe price ID configured for {request.plan_code}/{request.billing_cycle}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Prix Stripe non configuré pour ce plan. Contactez le support."
+        )
     
     # Get or create Stripe customer
     stripe_customer_id = await stripe_service.get_or_create_customer(
@@ -70,13 +182,14 @@ async def create_checkout_session(
     )
     
     # Update user with Stripe customer ID if not set
-    if not current_user.subscription.stripe_customer_id:
+    user_doc = await db.users.find_one({"_id": current_user.id})
+    if not user_doc.get("stripe_customer_id"):
         await db.users.update_one(
             {"_id": current_user.id},
             {"$set": {"stripe_customer_id": stripe_customer_id}}
         )
     
-    # Create checkout session
+    # Create checkout session with plan_code in metadata
     success_url = f"{settings.frontend_url}/subscription?success=true&session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{settings.frontend_url}/subscription?canceled=true"
     
@@ -86,11 +199,11 @@ async def create_checkout_session(
         success_url=success_url,
         cancel_url=cancel_url,
         user_id=current_user.id,
-        plan_id=request.plan_id.value,
+        plan_id=request.plan_code.value,  # NEW: Uses plan_code, passed as plan_id for Stripe metadata
         billing_cycle=request.billing_cycle.value
     )
     
-    logger.info(f"Checkout session created for user {current_user.email}, plan {request.plan_id}")
+    logger.info(f"Checkout session created for user {current_user.email}, plan_code={request.plan_code.value}")
     
     return CheckoutSessionResponse(
         checkout_url=result["checkout_url"],
@@ -106,7 +219,14 @@ async def stripe_webhook(
 ):
     """
     Handle Stripe webhook events.
+    
     CRITICAL: Always return 200 OK to Stripe - never let exceptions propagate.
+    
+    Events handled:
+    - checkout.session.completed: New subscription
+    - customer.subscription.updated: Plan change, renewal
+    - customer.subscription.deleted: Cancellation
+    - invoice.payment_failed: Failed payment -> reset to BASIC
     """
     try:
         if not stripe_signature:
@@ -138,6 +258,7 @@ async def stripe_webhook(
             
             elif event_type == "invoice.payment_failed":
                 await handle_payment_failed(db, data)
+                
         except Exception as e:
             logger.error(f"Webhook handler error for {event_type}: {e}")
     
@@ -148,16 +269,24 @@ async def stripe_webhook(
 
 
 async def handle_checkout_completed(db: AsyncIOMotorDatabase, session: dict):
-    """Handle successful checkout session."""
-    user_id = session.get("metadata", {}).get("user_id")
-    plan_id = session.get("metadata", {}).get("plan_id")
-    billing_cycle = session.get("metadata", {}).get("billing_cycle")
+    """
+    Handle successful checkout session.
+    
+    Creates subscription record and updates user plan_code + limits.
+    """
+    metadata = session.get("metadata", {})
+    user_id = metadata.get("user_id")
+    plan_code = metadata.get("plan_id")  # This is plan_code, named plan_id in Stripe metadata
+    billing_cycle = metadata.get("billing_cycle")
     subscription_id = session.get("subscription")
     customer_id = session.get("customer")
     
-    if not all([user_id, plan_id, subscription_id]):
-        logger.error(f"Missing data in checkout session: {session}")
+    if not all([user_id, plan_code, subscription_id]):
+        logger.error(f"Missing data in checkout session: user_id={user_id}, plan_code={plan_code}, sub={subscription_id}")
         return
+    
+    # Normalize plan_code (handle legacy values)
+    normalized_plan_code = normalize_plan_code(plan_code)
     
     # Get subscription details from Stripe
     stripe_sub = await stripe_service.get_subscription(subscription_id)
@@ -165,15 +294,15 @@ async def handle_checkout_completed(db: AsyncIOMotorDatabase, session: dict):
     now = datetime.utcnow()
     sub_id = generate_id()
     
-    # Create subscription record
+    # Create subscription record with plan_code
     subscription_doc = {
         "_id": sub_id,
         "user_id": user_id,
         "stripe_customer_id": customer_id,
         "stripe_subscription_id": subscription_id,
-        "plan_id": plan_id,
+        "plan_code": normalized_plan_code.value,  # NEW: Uses plan_code
         "billing_cycle": billing_cycle or "monthly",
-        "status": SubscriptionStatus.ACTIVE.value,
+        "status": "active",
         "current_period_start": stripe_sub["current_period_start"] if stripe_sub else now,
         "current_period_end": stripe_sub["current_period_end"] if stripe_sub else now,
         "cancel_at_period_end": False,
@@ -183,50 +312,61 @@ async def handle_checkout_completed(db: AsyncIOMotorDatabase, session: dict):
     
     # Deactivate any existing subscriptions
     await db.subscriptions.update_many(
-        {"user_id": user_id, "status": SubscriptionStatus.ACTIVE.value},
-        {"$set": {"status": SubscriptionStatus.CANCELED.value, "updated_at": now}}
+        {"user_id": user_id, "status": "active"},
+        {"$set": {"status": "canceled", "updated_at": now}}
     )
     
     # Insert new subscription
     await db.subscriptions.insert_one(subscription_doc)
     
-    # Update user limits based on plan
-    plan_limits = PLAN_LIMITS.get(PlanType(plan_id), PLAN_LIMITS[PlanType.SOLO])
+    # Update user plan_code and limits
+    await update_user_plan_and_limits(db, user_id, normalized_plan_code.value)
+    
+    # Also update stripe_customer_id on user
     await db.users.update_one(
         {"_id": user_id},
         {"$set": {
             "stripe_customer_id": customer_id,
-            "plan_id": plan_id,
-            "limits.max_aircrafts": plan_limits["max_aircrafts"],
-            "limits.has_fleet_access": plan_limits["has_fleet_access"],
-            "limits.has_mechanic_sharing": plan_limits["has_mechanic_sharing"],
-            "limits.ocr_per_month": plan_limits["ocr_per_month"],
-            "updated_at": now
+            "subscription.stripe_customer_id": customer_id,
+            "subscription.stripe_subscription_id": subscription_id
         }}
     )
     
-    logger.info(f"Subscription created for user {user_id}: {plan_id}")
+    logger.info(f"CHECKOUT COMPLETED | user={user_id} | plan_code={normalized_plan_code.value} | sub_id={sub_id}")
 
 
 async def handle_subscription_updated(db: AsyncIOMotorDatabase, subscription: dict):
-    """Handle subscription update (e.g., plan change, renewal)."""
+    """
+    Handle subscription update (plan change, renewal, etc.).
+    
+    Updates subscription status and user limits.
+    """
     stripe_subscription_id = subscription["id"]
-    status_value = subscription["status"]
+    stripe_status = subscription["status"]
     cancel_at_period_end = subscription.get("cancel_at_period_end", False)
     
     # Map Stripe status to our status
     status_map = {
-        "active": SubscriptionStatus.ACTIVE.value,
-        "canceled": SubscriptionStatus.CANCELED.value,
-        "past_due": SubscriptionStatus.PAST_DUE.value,
-        "trialing": SubscriptionStatus.TRIALING.value,
-        "incomplete": SubscriptionStatus.INCOMPLETE.value,
+        "active": "active",
+        "canceled": "canceled",
+        "past_due": "past_due",
+        "trialing": "trialing",
+        "incomplete": "incomplete",
     }
     
-    new_status = status_map.get(status_value, SubscriptionStatus.ACTIVE.value)
-    
+    new_status = status_map.get(stripe_status, "active")
     now = datetime.utcnow()
     
+    # Get our subscription record
+    our_sub = await db.subscriptions.find_one({
+        "stripe_subscription_id": stripe_subscription_id
+    })
+    
+    if not our_sub:
+        logger.warning(f"Subscription not found for Stripe ID: {stripe_subscription_id}")
+        return
+    
+    # Update subscription record
     await db.subscriptions.update_one(
         {"stripe_subscription_id": stripe_subscription_id},
         {"$set": {
@@ -238,13 +378,32 @@ async def handle_subscription_updated(db: AsyncIOMotorDatabase, subscription: di
         }}
     )
     
-    logger.info(f"Subscription {stripe_subscription_id} updated to status: {new_status}")
+    # Update user subscription status
+    user_id = our_sub.get("user_id")
+    if user_id:
+        await db.users.update_one(
+            {"_id": user_id},
+            {"$set": {
+                "subscription.status": new_status,
+                "updated_at": now
+            }}
+        )
+    
+    logger.info(f"SUBSCRIPTION UPDATED | stripe_sub={stripe_subscription_id} | status={new_status}")
 
 
 async def handle_subscription_deleted(db: AsyncIOMotorDatabase, subscription: dict):
-    """Handle subscription cancellation/deletion."""
+    """
+    Handle subscription cancellation/deletion.
+    
+    Resets user to BASIC plan with BASIC limits.
+    """
     stripe_subscription_id = subscription["id"]
-    user_id = subscription.get("metadata", {}).get("user_id")
+    
+    # Get our subscription record
+    our_sub = await db.subscriptions.find_one({
+        "stripe_subscription_id": stripe_subscription_id
+    })
     
     now = datetime.utcnow()
     
@@ -252,42 +411,61 @@ async def handle_subscription_deleted(db: AsyncIOMotorDatabase, subscription: di
     await db.subscriptions.update_one(
         {"stripe_subscription_id": stripe_subscription_id},
         {"$set": {
-            "status": SubscriptionStatus.CANCELED.value,
+            "status": "canceled",
             "updated_at": now
         }}
     )
     
-    # Reset user to free tier limits
-    if user_id:
-        await db.users.update_one(
-            {"_id": user_id},
-            {"$set": {
-                "plan_id": None,
-                "limits.max_aircrafts": 1,
-                "limits.has_fleet_access": False,
-                "limits.has_mechanic_sharing": False,
-                "limits.ocr_per_month": 5,
-                "updated_at": now
-            }}
-        )
+    # Reset user to BASIC plan
+    user_id = our_sub.get("user_id") if our_sub else subscription.get("metadata", {}).get("user_id")
     
-    logger.info(f"Subscription {stripe_subscription_id} deleted")
+    if user_id:
+        await reset_user_to_basic(db, user_id)
+    
+    logger.info(f"SUBSCRIPTION DELETED | stripe_sub={stripe_subscription_id} | user={user_id} | reset to BASIC")
 
 
 async def handle_payment_failed(db: AsyncIOMotorDatabase, invoice: dict):
-    """Handle failed payment."""
+    """
+    Handle failed payment.
+    
+    POLICY: Reset user to BASIC immediately (Apple-safe, simple).
+    User keeps their data but loses premium features until payment resolves.
+    """
     subscription_id = invoice.get("subscription")
     
-    if subscription_id:
-        await db.subscriptions.update_one(
-            {"stripe_subscription_id": subscription_id},
-            {"$set": {
-                "status": SubscriptionStatus.PAST_DUE.value,
-                "updated_at": datetime.utcnow()
-            }}
+    if not subscription_id:
+        return
+    
+    # Get our subscription record
+    our_sub = await db.subscriptions.find_one({
+        "stripe_subscription_id": subscription_id
+    })
+    
+    now = datetime.utcnow()
+    
+    # Update subscription status to past_due
+    await db.subscriptions.update_one(
+        {"stripe_subscription_id": subscription_id},
+        {"$set": {
+            "status": "past_due",
+            "updated_at": now
+        }}
+    )
+    
+    # POLICY: Reset user to BASIC immediately
+    user_id = our_sub.get("user_id") if our_sub else None
+    
+    if user_id:
+        await reset_user_to_basic(db, user_id)
+        
+        # Also update subscription status on user
+        await db.users.update_one(
+            {"_id": user_id},
+            {"$set": {"subscription.status": "past_due"}}
         )
     
-    logger.warning(f"Payment failed for subscription {subscription_id}")
+    logger.warning(f"PAYMENT FAILED | stripe_sub={subscription_id} | user={user_id} | reset to BASIC")
 
 
 @router.get("/subscription", response_model=SubscriptionResponse)
@@ -297,42 +475,64 @@ async def get_subscription(
 ):
     """
     Get current user's active subscription.
+    
+    Returns plan_code, limits, and subscription details.
     """
+    # Get active subscription
     subscription = await db.subscriptions.find_one({
         "user_id": current_user.id,
-        "status": {"$in": [
-            SubscriptionStatus.ACTIVE.value,
-            SubscriptionStatus.TRIALING.value,
-            SubscriptionStatus.PAST_DUE.value
-        ]}
+        "status": {"$in": ["active", "trialing", "past_due"]}
     })
     
+    # Get user document for current limits
+    user_doc = await db.users.find_one({"_id": current_user.id})
+    
     if not subscription:
+        # No subscription - return BASIC
+        basic_limits = get_basic_limits()
+        basic_def = get_plan_definition(PlanCode.BASIC)
+        
         return SubscriptionResponse(
             has_subscription=False,
             subscription=None,
-            plan_limits=PLAN_LIMITS[PlanType.SOLO]  # Free tier
+            plan_limits=basic_limits,
+            plan_definition={
+                "code": basic_def.code.value,
+                "name": basic_def.name,
+                "monthly_price_cad": basic_def.monthly_price_cad,
+                "yearly_price_cad": basic_def.yearly_price_cad
+            }
         )
     
-    plan_id = PlanType(subscription["plan_id"])
+    # Get plan_code from subscription
+    plan_code_str = subscription.get("plan_code") or subscription.get("plan_id") or "BASIC"
+    plan_code = normalize_plan_code(plan_code_str)
+    plan_def = get_plan_definition(plan_code)
+    plan_limits = compute_limits(plan_code.value)
     
     return SubscriptionResponse(
         has_subscription=True,
-        subscription=Subscription(
+        subscription=SubscriptionInfo(
             id=subscription["_id"],
             user_id=subscription["user_id"],
-            stripe_customer_id=subscription["stripe_customer_id"],
-            stripe_subscription_id=subscription["stripe_subscription_id"],
-            plan_id=plan_id,
+            plan_code=plan_code,
             billing_cycle=BillingCycle(subscription.get("billing_cycle", "monthly")),
-            status=SubscriptionStatus(subscription["status"]),
+            status=subscription["status"],
+            stripe_customer_id=subscription.get("stripe_customer_id"),
+            stripe_subscription_id=subscription.get("stripe_subscription_id"),
             current_period_start=subscription.get("current_period_start"),
             current_period_end=subscription.get("current_period_end"),
             cancel_at_period_end=subscription.get("cancel_at_period_end", False),
             created_at=subscription["created_at"],
             updated_at=subscription["updated_at"]
         ),
-        plan_limits=PLAN_LIMITS[plan_id]
+        plan_limits=plan_limits,
+        plan_definition={
+            "code": plan_def.code.value,
+            "name": plan_def.name,
+            "monthly_price_cad": plan_def.monthly_price_cad,
+            "yearly_price_cad": plan_def.yearly_price_cad
+        }
     )
 
 
@@ -343,10 +543,12 @@ async def cancel_subscription(
 ):
     """
     Cancel the current user's subscription (at period end).
+    
+    User keeps access until current_period_end.
     """
     subscription = await db.subscriptions.find_one({
         "user_id": current_user.id,
-        "status": SubscriptionStatus.ACTIVE.value
+        "status": "active"
     })
     
     if not subscription:
@@ -370,7 +572,7 @@ async def cancel_subscription(
         }}
     )
     
-    logger.info(f"Subscription cancelled for user {current_user.email}")
+    logger.info(f"SUBSCRIPTION CANCEL SCHEDULED | user={current_user.email} | ends={result['current_period_end']}")
     
     return {
         "message": "Abonnement annulé. Vous aurez accès jusqu'à la fin de la période en cours.",
@@ -404,3 +606,38 @@ async def create_portal_session(
     )
     
     return PortalSessionResponse(portal_url=portal_url)
+
+
+# ============================================================
+# PLAN INFO ENDPOINT
+# ============================================================
+
+@router.get("/plans")
+async def get_available_plans():
+    """
+    Get all available plans with pricing and limits.
+    
+    Useful for frontend to display plan comparison.
+    """
+    plans = []
+    
+    for plan_code, plan_def in PLAN_DEFINITIONS.items():
+        plans.append({
+            "code": plan_def.code.value,
+            "name": plan_def.name,
+            "description": plan_def.description,
+            "monthly_price_cad": plan_def.monthly_price_cad,
+            "yearly_price_cad": plan_def.yearly_price_cad,
+            "limits": {
+                "max_aircrafts": plan_def.limits.max_aircrafts,
+                "ocr_per_month": plan_def.limits.ocr_per_month,
+                "gps_logbook": plan_def.limits.gps_logbook,
+                "tea_amo_sharing": plan_def.limits.tea_amo_sharing,
+                "invoices": plan_def.limits.invoices,
+                "cost_per_hour": plan_def.limits.cost_per_hour,
+                "prebuy": plan_def.limits.prebuy,
+            },
+            "is_free": plan_def.monthly_price_cad == 0
+        })
+    
+    return {"plans": plans}
