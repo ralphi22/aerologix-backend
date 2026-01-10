@@ -2,16 +2,25 @@
 Component Settings Routes for AeroLogix AI
 Manages aircraft component maintenance intervals
 Transport Canada RAC 605 / Standard 625 compliant (INFORMATIONAL ONLY)
+
+Also provides Critical Components API for tracking component lifecycle.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from datetime import datetime
+from typing import List, Optional
 import logging
 
 from models.component_settings import (
     ComponentSettingsCreate,
     ComponentSettingsUpdate,
     CANADIAN_REGULATIONS
+)
+from models.installed_components import (
+    ComponentType,
+    DEFAULT_TBO,
+    CriticalComponentResponse,
+    CriticalComponentsResponse,
 )
 from models.user import User
 from services.auth_deps import get_current_user
