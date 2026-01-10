@@ -118,7 +118,7 @@ class TestOCRModeIsolation:
         
         # Cleanup
         db_client.ocr_scans.delete_one({"_id": scan_id})
-        db_client.invoices.delete_one({"_id": data["applied"]["invoice_id"]})
+        delete_invoice_by_id(db_client, data["applied"]["invoice_id"])
         
         print("✅ PASS: Invoice scan creates ONLY invoice record (no parts, no components)")
     
