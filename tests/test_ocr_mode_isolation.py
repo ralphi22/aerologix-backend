@@ -266,7 +266,7 @@ class TestOCRModeIsolation:
         assert invoice_id is not None
         
         # Verify invoice data
-        invoice = db_client.invoices.find_one({"_id": invoice_id})
+        invoice = get_invoice_by_id(db_client, invoice_id)
         assert invoice is not None
         
         # Check all financial fields
