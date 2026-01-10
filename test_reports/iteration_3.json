@@ -1,0 +1,40 @@
+{
+  "summary": "Backend testing completed for OCR Mode Isolation feature. All 8 tests passed. Invoice OCR correctly creates ONLY invoice records (no parts, no components, no hours updates). Report OCR continues to create parts and components as expected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/test_ocr_mode_isolation.py",
+    "/app/test_reports/pytest/pytest_ocr_isolation.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Code is well-structured with clear business rule comments (lines 1134-1141)",
+    "Invoice mode isolation correctly implemented: parts_created=0, components_created=0, hours_updated=0",
+    "Line items from invoice are stored as reference in 'line_items' field, NOT as separate part_records",
+    "Invoice deduplication works correctly - checks by invoice_number first, then by total+date",
+    "Response includes 'mode' field (REPORT or INVOICE) for frontend clarity",
+    "Logging is comprehensive for debugging: INVOICE MODE ISOLATION and OCR APPLY SUMMARY logs"
+  ],
+  "updated_files": [
+    "/app/tests/test_ocr_mode_isolation.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A - backend only testing"
+  },
+  "test_credentials": {
+    "email": "test@aerologix.com",
+    "password": "testpassword123"
+  },
+  "seed_data_creation": "Test OCR scans created directly in MongoDB with status=COMPLETED, cleaned up after each test",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "OCR Mode Isolation is fully functional. Tests cover: 1) Invoice creates ONLY invoice record (no parts/components), 2) Invoice with parts list does NOT create part_records, 3) Invoice does NOT update aircraft hours, 4) Invoice stores financial data (vendor_name, invoice_number, invoice_date, subtotal, tax, total, currency), 5) Invoice stores line_items as reference, 6) Report scan still creates parts correctly, 7) Response includes 'mode' field, 8) Response shows parts_created=0 for invoices. Test user: test@aerologix.com / testpassword123. Aircraft ID: 1768078528139218"
+}
