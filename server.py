@@ -64,6 +64,7 @@ app.include_router(eko.router)
 app.include_router(flight_candidates.router)
 app.include_router(logbook.router)
 app.include_router(pilot_invites.router)
+app.include_router(users.router)
 
 @app.get("/")
 async def root():
