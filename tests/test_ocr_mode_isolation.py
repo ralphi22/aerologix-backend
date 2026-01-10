@@ -314,7 +314,7 @@ class TestOCRModeIsolation:
         data = response.json()
         
         invoice_id = data["applied"].get("invoice_id")
-        invoice = db_client.invoices.find_one({"_id": invoice_id})
+        invoice = get_invoice_by_id(db_client, invoice_id)
         
         # Verify line_items structure
         assert "line_items" in invoice
