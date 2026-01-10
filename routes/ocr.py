@@ -1488,10 +1488,35 @@ async def apply_ocr_results(
                 # Non-blocking: log but don't fail the apply
                 logger.warning(f"OCR Intelligence failed (non-blocking): {intel_error}")
         
+        # ============================================================
+        # LIMITATION DETECTOR: Extract TEA operational limitations
+        # ============================================================
+        limitations_created = 0
+        if is_maintenance_report and scan.get("raw_text"):
+            try:
+                from services.limitation_detector import LimitationDetectorService
+                
+                detector = LimitationDetectorService(db)
+                created_limitations = await detector.process_ocr_report(
+                    aircraft_id=aircraft_id,
+                    user_id=current_user.id,
+                    report_id=scan_id,
+                    raw_text=scan.get("raw_text", ""),
+                    extracted_data=extracted_data
+                )
+                limitations_created = len(created_limitations)
+                
+                if limitations_created > 0:
+                    logger.info(f"Limitation Detector created {limitations_created} limitation(s) from scan {scan_id}")
+                    
+            except Exception as lim_error:
+                # Non-blocking: log but don't fail the apply
+                logger.warning(f"Limitation Detector failed (non-blocking): {lim_error}")
+        
         # TC-SAFE: Log APPLY SUMMARY for debug
         report_parts_count = len(extracted_data.get("parts_replaced", [])) if is_maintenance_report else 0
         invoice_parts_count = len(extracted_data.get("parts", []) + extracted_data.get("parts_replaced", [])) if is_invoice else 0
-        logger.info(f"OCR APPLY SUMMARY | scan_id={scan_id} | doc_type={document_type} | report_parts={report_parts_count} | invoice_parts={invoice_parts_count} | parts_created={len(applied_ids['part_ids'])} | components_created={components_created} | invoice_created={invoice_created}")
+        logger.info(f"OCR APPLY SUMMARY | scan_id={scan_id} | doc_type={document_type} | report_parts={report_parts_count} | invoice_parts={invoice_parts_count} | parts_created={len(applied_ids['part_ids'])} | components_created={components_created} | limitations_created={limitations_created} | invoice_created={invoice_created}")
         
         return {
             "message": "OCR results applied successfully",
@@ -1502,7 +1527,8 @@ async def apply_ocr_results(
                 "stc_records": len(applied_ids["stc_ids"]),
                 "elt_updated": elt_created,
                 "invoice_created": invoice_created,
-                "components_created": components_created
+                "components_created": components_created,
+                "limitations_created": limitations_created
             }
         }
         
