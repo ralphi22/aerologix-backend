@@ -278,3 +278,67 @@ async def get_adsb_summary(
             summary[adsb_type][record_status] = count
     
     return summary
+
+
+
+# ============================================================
+# TC AD/SB COMPARISON ENDPOINT
+# ============================================================
+
+from services.adsb_comparison_service import ADSBComparisonService
+from models.tc_adsb import ADSBComparisonResponse
+
+
+@router.get(
+    "/compare/{aircraft_id}",
+    response_model=ADSBComparisonResponse,
+    summary="Compare aircraft records against TC AD/SB database",
+    description="""
+    Compares aircraft OCR/manual records against Transport Canada AD/SB database.
+    
+    **TC-SAFE:** This endpoint does NOT determine compliance status.
+    It only provides factual comparison data for informational purposes.
+    
+    All airworthiness decisions must be made by a licensed AME/TEA.
+    
+    **Returns:**
+    - List of TC requirements with found/missing status
+    - New regulatory items since last logbook entry
+    - Recurrence calculations for periodic inspections
+    """
+)
+async def compare_adsb(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    Compare aircraft AD/SB records against Transport Canada requirements.
+    
+    TC-SAFE: Never returns compliance status.
+    """
+    logger.info(f"AD/SB Compare | aircraft_id={aircraft_id} | user={current_user.id}")
+    
+    try:
+        service = ADSBComparisonService(db)
+        result = await service.compare(aircraft_id, current_user.id)
+        
+        logger.info(
+            f"AD/SB Compare complete | aircraft_id={aircraft_id} | "
+            f"found={result.found_count} | missing={result.missing_count}"
+        )
+        
+        return result
+        
+    except ValueError as e:
+        logger.warning(f"AD/SB Compare failed | aircraft_id={aircraft_id} | error={e}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"AD/SB Compare error | aircraft_id={aircraft_id} | error={e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to compare AD/SB records"
+        )
