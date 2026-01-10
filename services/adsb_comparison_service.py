@@ -269,40 +269,42 @@ class ADSBComparisonService:
         recurrence_value: Optional[int],
         last_compliance_date: Optional[datetime],
         last_hours: Optional[float] = None
-    ) -> Optional[str]:
+    ) -> Tuple[Optional[str], Optional[datetime]]:
         """
         Calculate next due date/hours for recurring items.
         
-        Returns string representation of next due.
+        Returns:
+        - String representation of next due
+        - Datetime of next due (for DUE_SOON calculation)
         """
         if recurrence_type == RecurrenceType.ONCE:
-            return None
+            return None, None
         
         if recurrence_value is None:
-            return None
+            return None, None
         
         if recurrence_type == RecurrenceType.YEARS:
             if last_compliance_date:
-                next_due = last_compliance_date + timedelta(days=365 * recurrence_value)
-                return next_due.strftime("%Y-%m-%d")
-            return f"Every {recurrence_value} year(s) from compliance"
+                next_due_dt = last_compliance_date + timedelta(days=365 * recurrence_value)
+                return next_due_dt.strftime("%Y-%m-%d"), next_due_dt
+            return f"Every {recurrence_value} year(s) from compliance", None
         
         elif recurrence_type == RecurrenceType.HOURS:
             if last_hours is not None:
                 next_due_hours = last_hours + recurrence_value
-                return f"{next_due_hours:.1f} hours"
-            return f"Every {recurrence_value} hours from compliance"
+                return f"{next_due_hours:.1f} hours", None
+            return f"Every {recurrence_value} hours from compliance", None
         
         elif recurrence_type == RecurrenceType.CYCLES:
-            return f"Every {recurrence_value} cycles"
+            return f"Every {recurrence_value} cycles", None
         
         elif recurrence_type == RecurrenceType.CALENDAR:
             if last_compliance_date:
-                next_due = last_compliance_date + timedelta(days=30 * recurrence_value)
-                return next_due.strftime("%Y-%m-%d")
-            return f"Every {recurrence_value} month(s) from compliance"
+                next_due_dt = last_compliance_date + timedelta(days=30 * recurrence_value)
+                return next_due_dt.strftime("%Y-%m-%d"), next_due_dt
+            return f"Every {recurrence_value} month(s) from compliance", None
         
-        return None
+        return None, None
     
     def determine_status(
         self,
