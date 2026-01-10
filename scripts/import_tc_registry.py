@@ -145,42 +145,48 @@ class ImportStats:
 # NORMALIZATION
 # ============================================================
 
-def normalize_record(record: Dict, tc_version: str) -> Dict:
+def normalize_record(record: dict, tc_version: str) -> dict:
     """
     Normalize a parsed record for MongoDB insertion.
     
-    - Adds tc_version
-    - Adds timestamps
-    - Extracts key fields from _tc_data
-    - Generates _id from registration
+    PRIVACY COMPLIANT: Only includes allowed fields.
+    Forbidden fields (city, province, serial_number, etc.) are NOT stored.
+    
+    Allowed fields:
+    - _id, registration, manufacturer, model, designator
+    - first_owner_given_name, first_owner_family_name
+    - validity_start, validity_end
+    - tc_version, created_at, updated_at
     """
     now = datetime.utcnow()
     registration = record.get("registration", "")
     
-    # Extract tc_data (additional fields)
-    tc_data = record.pop("_tc_data", {})
-    
+    # PRIVACY: Only include allowed fields
     return {
         "_id": registration.replace("-", "").upper(),  # e.g., "CGABC"
         "registration": registration,
         "manufacturer": record.get("manufacturer"),
         "model": record.get("model"),
         "designator": record.get("designator"),
-        "serial_number": record.get("serial_number"),
-        "category": record.get("category"),
+        # Owner names only (no city, province, full_name)
         "first_owner_given_name": record.get("first_owner_given_name"),
         "first_owner_family_name": record.get("first_owner_family_name"),
-        "first_owner_full_name": record.get("first_owner_full_name"),
-        "first_owner_city": record.get("first_owner_city"),
-        "first_owner_province": record.get("first_owner_province"),
+        # Dates
         "validity_start": record.get("validity_start"),
         "validity_end": record.get("validity_end"),
-        "status": record.get("status"),
+        # Metadata
         "tc_version": tc_version,
-        "tc_data": tc_data,
         "created_at": now,
         "updated_at": now,
     }
+    # NOTE: The following fields are INTENTIONALLY NOT INCLUDED:
+    # - serial_number (privacy)
+    # - category (not needed)
+    # - status (not needed)
+    # - first_owner_city (privacy)
+    # - first_owner_province (privacy)
+    # - first_owner_full_name (privacy - use given + family instead)
+    # - tc_data (bulk personal data)
 
 
 # ============================================================
