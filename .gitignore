@@ -18,3 +18,7 @@ venv/
 
 # TC Data files (large datasets - do not commit)
 tc_data/
+-e 
+# Environment files
+*.env
+*.env.*
