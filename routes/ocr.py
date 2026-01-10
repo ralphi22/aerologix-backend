@@ -1132,162 +1132,55 @@ async def apply_ocr_results(
             elt_created = True
         
         # 7. Create Invoice record if document type is invoice (WITH DEDUPLICATION)
+        # ============================================================
+        # INVOICE MODE ISOLATION: Invoices are FINANCIAL, not TECHNICAL
+        # ❌ Do NOT create parts
+        # ❌ Do NOT create InstalledComponents  
+        # ❌ Do NOT update hours
+        # ✅ Only store financial data in invoices collection
+        # ============================================================
         invoice_created = False
         if is_invoice:
-            # Préparer les données de la facture - TC-SAFE: accepter tous les champs de coût
+            # Extract ONLY financial data
             invoice_total = extracted_data.get("total") or extracted_data.get("total_cost")
+            subtotal = extracted_data.get("subtotal")
+            tax = extracted_data.get("tax")
             parts_cost = extracted_data.get("parts_cost")
             labor_cost = extracted_data.get("labor_cost")
             labor_hours = extracted_data.get("labor_hours")
+            vendor_name = extracted_data.get("vendor_name") or extracted_data.get("supplier")
+            invoice_number = extracted_data.get("invoice_number")
+            currency = extracted_data.get("currency", "CAD")
             
+            # Parse invoice date
             invoice_date = None
-            if extracted_data.get("invoice_date") or extracted_data.get("date") or extracted_data.get("report_date"):
+            date_str = extracted_data.get("invoice_date") or extracted_data.get("date")
+            if date_str:
                 try:
-                    date_str = extracted_data.get("invoice_date") or extracted_data.get("date") or extracted_data.get("report_date")
                     invoice_date = datetime.fromisoformat(date_str)
                 except:
                     pass
             
-            # TC-SAFE: Créer facture si au moins un coût existe
-            has_any_cost = invoice_total or parts_cost or labor_cost
+            # Extract line items for reference (stored in invoice, NOT as parts)
+            line_items = []
+            ocr_parts = extracted_data.get("parts") or extracted_data.get("parts_replaced") or []
+            for part in ocr_parts:
+                if isinstance(part, dict):
+                    line_items.append({
+                        "description": part.get("description") or part.get("name") or part.get("nom"),
+                        "part_number": part.get("part_number"),
+                        "quantity": part.get("quantity") or part.get("quantité"),
+                        "unit_price": part.get("unit_price") or part.get("prix_unitaire") or part.get("price"),
+                        "line_total": part.get("line_total") or part.get("total_ligne")
+                    })
             
-            # ============================================================
-            # INVOICE PART DEDUPLICATION - FIX FOR DUPLICATE CREATION
-            # ============================================================
+            # Check if we have any financial data to store
+            has_financial_data = invoice_total or subtotal or tax or parts_cost or labor_cost or invoice_number
             
-            # 1. USE SINGLE SOURCE: Prefer 'parts', fallback to 'parts_replaced'
-            # DO NOT concatenate both - they often contain the same data
-            ocr_parts = extracted_data.get("parts") or []
-            ocr_parts_replaced = extracted_data.get("parts_replaced") or []
-            
-            if ocr_parts and len(ocr_parts) > 0:
-                invoice_parts_raw = ocr_parts
-                logger.info(f"INVOICE PARTS SOURCE | using 'parts' field | count={len(ocr_parts)}")
-            elif ocr_parts_replaced and len(ocr_parts_replaced) > 0:
-                invoice_parts_raw = ocr_parts_replaced
-                logger.info(f"INVOICE PARTS SOURCE | using 'parts_replaced' field | count={len(ocr_parts_replaced)}")
-            else:
-                invoice_parts_raw = []
-                logger.info("INVOICE PARTS SOURCE | no parts found")
-            
-            # 2. NORMALIZATION: Map FR keys to EN keys for each part
-            def normalize_invoice_part(part):
-                """
-                Normalize part data from bilingual OCR (FR/EN).
-                Maps all French keys to English equivalents.
-                """
-                if not part or not isinstance(part, dict):
-                    return None
-                
-                # Map: part_number (EN) | numéro_de_pièce, numéro_pièce, numero_piece (FR)
-                part_number = (
-                    part.get("part_number") or 
-                    part.get("numéro_de_pièce") or 
-                    part.get("numéro_pièce") or 
-                    part.get("numero_piece") or
-                    part.get("numero_de_piece")
-                )
-                
-                # Map: name (EN) | nom (FR)
-                name = (
-                    part.get("name") or 
-                    part.get("description") or 
-                    part.get("nom")
-                )
-                
-                # Map: quantity (EN) | quantité, quantite (FR)
-                quantity = (
-                    part.get("quantity") or 
-                    part.get("quantité") or 
-                    part.get("quantite")
-                )
-                
-                # Map: unit_price (EN) | prix_unitaire, prix (FR)
-                unit_price = (
-                    part.get("unit_price") or 
-                    part.get("prix_unitaire") or 
-                    part.get("price") or 
-                    part.get("prix")
-                )
-                
-                # Map: line_total (EN) | total_ligne (FR)
-                line_total = (
-                    part.get("line_total") or 
-                    part.get("total_ligne")
-                )
-                
-                # Map: serial_number (EN) | numéro_série, numero_serie (FR)
-                serial_number = (
-                    part.get("serial_number") or 
-                    part.get("numéro_série") or 
-                    part.get("numero_serie")
-                )
-                
-                # Map: manufacturer (EN) | fabricant (FR)
-                manufacturer = (
-                    part.get("manufacturer") or 
-                    part.get("fabricant")
-                )
-                
-                return {
-                    "part_number": part_number,
-                    "name": name,
-                    "description": name,
-                    "quantity": quantity,
-                    "unit_price": unit_price,
-                    "price": unit_price,
-                    "line_total": line_total,
-                    "serial_number": serial_number,
-                    "manufacturer": manufacturer,
-                }
-            
-            # 3. DEDUPLICATION: Create stable composite key for each part
-            def get_part_dedup_key(normalized_part):
-                """
-                Create stable composite key for deduplication.
-                key = lower(trim(part_number or description or name)) | qty | unit_price | line_total
-                """
-                part_key = str(
-                    normalized_part.get("part_number") or 
-                    normalized_part.get("description") or 
-                    normalized_part.get("name") or ""
-                ).strip().lower()
-                qty = str(normalized_part.get("quantity") or 1).strip()
-                unit = str(normalized_part.get("unit_price") or normalized_part.get("price") or "").strip()
-                line = str(normalized_part.get("line_total") or normalized_part.get("price") or "").strip()
-                return f"{part_key}|{qty}|{unit}|{line}"
-            
-            # Normalize all parts
-            normalized_parts = []
-            for p in invoice_parts_raw:
-                normalized = normalize_invoice_part(p)
-                if normalized:
-                    normalized_parts.append(normalized)
-            
-            # Deduplicate using stable composite key
-            seen_dedup_keys = set()
-            deduped_parts = []
-            for part in normalized_parts:
-                dedup_key = get_part_dedup_key(part)
-                if dedup_key not in seen_dedup_keys:
-                    seen_dedup_keys.add(dedup_key)
-                    deduped_parts.append(part)
-            
-            # Use deduped_parts as invoice_parts for creation
-            invoice_parts = deduped_parts
-            
-            # LOG: PART DEDUP FINAL (REQUIRED FORMAT)
-            logger.info(f"PART DEDUP FINAL | before={len(invoice_parts_raw)} | after={len(deduped_parts)}")
-            
-            has_parts = len(invoice_parts) > 0
-            
-            if has_any_cost or has_parts:
-                # DÉDUPLICATION: vérifier si une facture similaire existe déjà
+            if has_financial_data or len(line_items) > 0:
+                # DEDUPLICATION: Check if similar invoice exists
                 existing_invoice = None
-                invoice_number = extracted_data.get("invoice_number")
-                vendor_name = extracted_data.get("vendor_name") or extracted_data.get("supplier")
                 
-                # Chercher par invoice_number d'abord (plus fiable)
                 if invoice_number:
                     existing_invoice = await db.invoices.find_one({
                         "aircraft_id": aircraft_id,
@@ -1295,7 +1188,6 @@ async def apply_ocr_results(
                         "invoice_number": invoice_number
                     })
                 
-                # Sinon chercher par date + montant
                 if not existing_invoice and invoice_total and invoice_date:
                     existing_invoice = await db.invoices.find_one({
                         "aircraft_id": aircraft_id,
@@ -1305,14 +1197,16 @@ async def apply_ocr_results(
                     })
                 
                 if existing_invoice:
-                    # Facture similaire existe - mettre à jour au lieu de créer
+                    # Update existing invoice
                     update_fields = {
                         "updated_at": now,
-                        "invoice_number": invoice_number or existing_invoice.get("invoice_number"),
-                        "supplier": vendor_name or existing_invoice.get("supplier"),
+                        "vendor_name": vendor_name or existing_invoice.get("vendor_name"),
+                        "subtotal": subtotal,
+                        "tax": tax,
                         "labor_hours": labor_hours,
                         "labor_cost": labor_cost,
                         "parts_cost": parts_cost,
+                        "line_items": line_items,
                     }
                     await db.invoices.update_one(
                         {"_id": existing_invoice["_id"]},
@@ -1320,33 +1214,26 @@ async def apply_ocr_results(
                     )
                     applied_ids["invoice_id"] = str(existing_invoice["_id"])
                     invoice_created = True
-                    logger.info(f"Updated existing invoice {existing_invoice['_id']} for aircraft {aircraft_id} (deduplication)")
+                    logger.info(f"Updated existing invoice {existing_invoice['_id']} (deduplication)")
                 else:
-                    # TC-SAFE: needs_review si invoice_number manquant
-                    needs_review = not invoice_number
-                    
-                    # Compute subtotal if missing: parts_cost + labor_cost
-                    computed_subtotal = extracted_data.get("subtotal")
-                    if computed_subtotal is None and (parts_cost or labor_cost):
-                        computed_subtotal = (parts_cost or 0) + (labor_cost or 0)
-                    
+                    # Create NEW invoice record - FINANCIAL DATA ONLY
                     invoice_doc = {
                         "user_id": current_user.id,
                         "aircraft_id": aircraft_id,
                         "invoice_number": invoice_number,
                         "invoice_date": invoice_date or now,
-                        "supplier": vendor_name,
-                        "subtotal": computed_subtotal,
-                        "tax": extracted_data.get("tax"),
+                        "vendor_name": vendor_name,
+                        "subtotal": subtotal,
+                        "tax": tax,
                         "total": invoice_total,
                         "labor_hours": labor_hours,
                         "labor_cost": labor_cost,
                         "parts_cost": parts_cost,
-                        "currency": extracted_data.get("currency", "CAD"),
+                        "currency": currency,
+                        "line_items": line_items,  # Reference only, NOT part_records
                         "source": "ocr",
                         "ocr_scan_id": scan_id,
-                        "parts": invoice_parts,
-                        "needs_review": needs_review,
+                        "needs_review": not invoice_number,
                         "created_at": now,
                         "updated_at": now
                     }
@@ -1354,98 +1241,19 @@ async def apply_ocr_results(
                     result = await db.invoices.insert_one(invoice_doc)
                     applied_ids["invoice_id"] = str(result.inserted_id)
                     invoice_created = True
-                    logger.info(f"✅ Created invoice record {applied_ids['invoice_id']} for aircraft {aircraft_id} (needs_review={needs_review})")
                     
-                    # OCR INVOICE SUMMARY log
                     logger.info(
-                        f"OCR INVOICE SUMMARY | invoice_id={applied_ids['invoice_id']} | "
-                        f"labor={labor_cost} | parts={parts_cost} | total={invoice_total}"
+                        f"✅ INVOICE CREATED (FINANCIAL ONLY) | id={applied_ids['invoice_id']} | "
+                        f"vendor={vendor_name} | total={invoice_total} | lines={len(line_items)}"
                     )
             else:
-                logger.warning(f"⚠️ No invoice created: no cost data and no parts found")
+                logger.warning(f"⚠️ No invoice created: no financial data found")
             
-            # OCR DEBUG: Log invoice creation status with details
+            # LOG: INVOICE MODE ISOLATION - NO PARTS CREATED
             logger.info(
-                f"OCR DEBUG invoice created={invoice_created} "
-                f"invoice_number={extracted_data.get('invoice_number')} "
-                f"total={extracted_data.get('total')}"
-            )
-            
-            # 8. Créer les part_records pour les pièces de la facture (DEDUPED)
-            # Using already deduped invoice_parts - NO additional concatenation
-            created_count = 0
-            
-            for idx, part in enumerate(invoice_parts):
-                part_number = part.get("part_number")
-                part_description = part.get("description") or part.get("name")
-                
-                # TC-SAFE: Create part if part_number OR description exists
-                if not part_number and not part_description:
-                    logger.warning(
-                        f"OCR DEBUG part skipped index={idx} reason=missing_part_number_or_description"
-                    )
-                    continue
-                
-                # Check if part already exists in DB (only if part_number exists)
-                existing_part = None
-                if part_number:
-                    existing_part, match_type = await find_duplicate_part(
-                        db, aircraft_id, current_user.id,
-                        part_number, part.get("serial_number")
-                    )
-                
-                if existing_part and match_type == MatchType.EXACT:
-                    # Update existing part with invoice price
-                    update_data = {
-                        "purchase_price": part.get("unit_price") or part.get("line_total"),
-                        "supplier": vendor_name,
-                        "source": "ocr_invoice",
-                        "ocr_scan_id": scan_id,
-                        "updated_at": now
-                    }
-                    await db.part_records.update_one(
-                        {"_id": existing_part["_id"]},
-                        {"$set": update_data}
-                    )
-                    applied_ids["part_ids"].append(str(existing_part["_id"]))
-                    logger.info(f"Updated existing part {part_number} from invoice")
-                else:
-                    # Determine needs_review: False if all fields present
-                    has_all_fields = part_number and part.get("quantity") and part.get("unit_price")
-                    part_needs_review = not has_all_fields
-                    
-                    # Create NEW part record
-                    part_doc = {
-                        "user_id": current_user.id,
-                        "aircraft_id": aircraft_id,
-                        "part_number": part_number,
-                        "name": part_description or part_number or "Unknown Part",
-                        "serial_number": part.get("serial_number"),
-                        "quantity": part.get("quantity"),
-                        "purchase_price": part.get("unit_price") or part.get("line_total"),
-                        "supplier": vendor_name,
-                        "manufacturer": part.get("manufacturer"),
-                        "invoice_id": applied_ids.get("invoice_id"),
-                        "installed_on_aircraft": False,  # Invoice = purchase, not installed
-                        "source": "ocr_invoice",
-                        "ocr_scan_id": scan_id,
-                        "confirmed": False,
-                        "needs_review": part_needs_review,
-                        "created_at": now,
-                        "updated_at": now
-                    }
-                    
-                    result = await db.part_records.insert_one(part_doc)
-                    applied_ids["part_ids"].append(str(result.inserted_id))
-                    created_count += 1
-                    logger.info(f"✅ Created part {part_number or part_description} from invoice")
-            
-            # FINAL LOG: OCR INVOICE PARTS with actual CREATED count
-            logger.info(
-                f"OCR INVOICE PARTS RAW={len(invoice_parts_raw)} "
-                f"NORMALIZED={len(normalized_parts)} "
-                f"DEDUPED={len(deduped_parts)} "
-                f"CREATED={created_count}"
+                f"INVOICE MODE ISOLATION | scan_id={scan_id} | "
+                f"invoice_created={invoice_created} | parts_created=0 (disabled) | "
+                f"components_created=0 (disabled) | hours_updated=0 (disabled)"
             )
         
         # Update OCR scan status to APPLIED
