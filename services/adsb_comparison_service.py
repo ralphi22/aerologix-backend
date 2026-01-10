@@ -310,10 +310,17 @@ class ADSBComparisonService:
         recurrence_type: RecurrenceType,
         next_due: Optional[str],
         effective_date: Optional[datetime],
-        last_logbook_date: Optional[datetime]
+        last_logbook_date: Optional[datetime],
+        next_due_datetime: Optional[datetime] = None
     ) -> ComparisonStatus:
         """
         Determine comparison status (TC-SAFE: never compliance).
+        
+        Returns:
+        - MISSING: Item not found in aircraft records
+        - NEW: TC item effective_date > last_logbook_date
+        - DUE_SOON: Found but recurring item due within 90 days
+        - OK: Found and not due soon
         """
         if not found:
             # Check if it's a new regulatory item
@@ -322,11 +329,13 @@ class ADSBComparisonService:
                     return ComparisonStatus.NEW_REGULATORY
             return ComparisonStatus.MISSING
         
-        # Item found
-        if recurrence_type != RecurrenceType.ONCE and next_due:
-            return ComparisonStatus.RECURRENCE_DUE
+        # Item found - check if due soon for recurring items
+        if recurrence_type != RecurrenceType.ONCE and next_due_datetime:
+            days_until_due = (next_due_datetime - datetime.utcnow()).days
+            if days_until_due <= 90:  # Due within 90 days
+                return ComparisonStatus.DUE_SOON
         
-        return ComparisonStatus.FOUND
+        return ComparisonStatus.OK
     
     async def compare(
         self,
