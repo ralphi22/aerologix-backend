@@ -60,16 +60,16 @@ class TestOCRModeIsolation:
             "aircraft_id": self.aircraft_id
         })
         
-        # Create OCR scan with invoice document type (unique invoice number)
+        # Create OCR scan with invoice document type (unique invoice number AND unique total/date)
         scan_id = self._create_test_ocr_scan(
             document_type="invoice",
             extracted_data={
-                "invoice_number": f"INV-TEST-{unique_suffix}",
-                "invoice_date": "2024-01-15",
+                "invoice_number": f"INV-UNIQUE-{unique_suffix}",
+                "invoice_date": f"2025-{(unique_suffix % 12) + 1:02d}-15",  # Unique date
                 "vendor_name": "Aviation Parts Inc",
-                "subtotal": 1500.00,
+                "subtotal": 1500.00 + (unique_suffix % 1000),  # Unique subtotal
                 "tax": 195.00,
-                "total": 1695.00,
+                "total": 1695.00 + (unique_suffix % 1000),  # Unique total
                 "currency": "CAD",
                 "parts": [
                     {"part_number": "VP-001", "description": "Vacuum Pump", "quantity": 1, "unit_price": 800.00},
