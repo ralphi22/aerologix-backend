@@ -243,20 +243,20 @@ async def get_critical_components(
         
         # Calculate remaining hours until TBO
         remaining: Optional[float] = None
-        status = "UNKNOWN"
+        comp_status = "UNKNOWN"
         
         if tbo is not None and tbo > 0:
             remaining = max(0.0, tbo - time_since_install)
             
             # Determine status based on remaining hours
             if remaining <= 0:
-                status = "OVERDUE"
+                comp_status = "OVERDUE"
             elif remaining < 50:
-                status = "CRITICAL"
+                comp_status = "CRITICAL"
             elif remaining < 100:
-                status = "WARNING"
+                comp_status = "WARNING"
             else:
-                status = "OK"
+                comp_status = "OK"
         elif tbo is None:
             # No TBO defined - component is likely on-condition
             status = "ON_CONDITION"
