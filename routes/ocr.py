@@ -1464,10 +1464,34 @@ async def apply_ocr_results(
             }
         )
         
+        # ============================================================
+        # OCR INTELLIGENCE: Extract critical components (ONLY FOR RAPPORT)
+        # ============================================================
+        components_created = 0
+        if is_maintenance_report and extracted_data:
+            try:
+                from services.ocr_intelligence import OCRIntelligenceService
+                
+                intelligence = OCRIntelligenceService(db)
+                created_components = await intelligence.process_ocr_report(
+                    aircraft_id=aircraft_id,
+                    user_id=current_user.id,
+                    scan_id=scan_id,
+                    extracted_data=extracted_data
+                )
+                components_created = len(created_components)
+                
+                if components_created > 0:
+                    logger.info(f"OCR Intelligence created {components_created} component(s) from scan {scan_id}")
+                    
+            except Exception as intel_error:
+                # Non-blocking: log but don't fail the apply
+                logger.warning(f"OCR Intelligence failed (non-blocking): {intel_error}")
+        
         # TC-SAFE: Log APPLY SUMMARY for debug
         report_parts_count = len(extracted_data.get("parts_replaced", [])) if is_maintenance_report else 0
         invoice_parts_count = len(extracted_data.get("parts", []) + extracted_data.get("parts_replaced", [])) if is_invoice else 0
-        logger.info(f"OCR APPLY SUMMARY | scan_id={scan_id} | doc_type={document_type} | report_parts={report_parts_count} | invoice_parts={invoice_parts_count} | parts_created={len(applied_ids['part_ids'])} | invoice_created={invoice_created}")
+        logger.info(f"OCR APPLY SUMMARY | scan_id={scan_id} | doc_type={document_type} | report_parts={report_parts_count} | invoice_parts={invoice_parts_count} | parts_created={len(applied_ids['part_ids'])} | components_created={components_created} | invoice_created={invoice_created}")
         
         return {
             "message": "OCR results applied successfully",
@@ -1477,7 +1501,8 @@ async def apply_ocr_results(
                 "part_records": len(applied_ids["part_ids"]),
                 "stc_records": len(applied_ids["stc_ids"]),
                 "elt_updated": elt_created,
-                "invoice_created": invoice_created
+                "invoice_created": invoice_created,
+                "components_created": components_created
             }
         }
         
