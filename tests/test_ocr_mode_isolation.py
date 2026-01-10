@@ -492,7 +492,7 @@ class TestOCRModeIsolation:
             "user_id": "1768078526954195",  # Test user ID
             "aircraft_id": self.aircraft_id,
             "document_type": document_type,
-            "status": "completed",
+            "status": "COMPLETED",
             "raw_text": f"Test {document_type} document",
             "extracted_data": extracted_data,
             "error_message": None,
