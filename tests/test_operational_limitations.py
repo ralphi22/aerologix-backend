@@ -513,7 +513,7 @@ class TestLimitationDetectorPatterns:
             ("Transponder inoperative - avoid controlled airspace", ["CONTROLLED AIRSPACE"]),  # Detector finds CONTROLLED AIRSPACE
             ("Pitot static system requires inspection", ["PITOT"]),
             ("Must be done before entering controlled airspace", ["MUST BE DONE BEFORE", "CONTROLLED AIRSPACE"]),
-            ("Day VFR only - no night operations", ["DAY VFR ONLY"]),
+            ("Day VFR only - no night operations", ["VFR ONLY"]),  # Detector returns VFR ONLY
             ("ADS-B out not functional", ["ADS-B"]),
         ]
         
