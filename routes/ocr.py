@@ -1322,9 +1322,18 @@ async def apply_ocr_results(
                 logger.warning(f"Limitation Detector failed (non-blocking): {lim_error}")
         
         # TC-SAFE: Log APPLY SUMMARY for debug
-        report_parts_count = len(extracted_data.get("parts_replaced", [])) if is_maintenance_report else 0
-        invoice_parts_count = len(extracted_data.get("parts", []) + extracted_data.get("parts_replaced", [])) if is_invoice else 0
-        logger.info(f"OCR APPLY SUMMARY | scan_id={scan_id} | doc_type={document_type} | report_parts={report_parts_count} | invoice_parts={invoice_parts_count} | parts_created={len(applied_ids['part_ids'])} | components_created={components_created} | limitations_created={limitations_created} | invoice_created={invoice_created}")
+        if is_maintenance_report:
+            report_parts_count = len(extracted_data.get("parts_replaced", []))
+            logger.info(
+                f"OCR APPLY SUMMARY (REPORT) | scan_id={scan_id} | "
+                f"parts={report_parts_count} | parts_created={len(applied_ids['part_ids'])} | "
+                f"components={components_created} | limitations={limitations_created}"
+            )
+        elif is_invoice:
+            logger.info(
+                f"OCR APPLY SUMMARY (INVOICE - FINANCIAL ONLY) | scan_id={scan_id} | "
+                f"invoice_created={invoice_created} | parts_created=0 (disabled by design)"
+            )
         
         return {
             "message": "OCR results applied successfully",
@@ -1335,9 +1344,11 @@ async def apply_ocr_results(
                 "stc_records": len(applied_ids["stc_ids"]),
                 "elt_updated": elt_created,
                 "invoice_created": invoice_created,
+                "invoice_id": applied_ids.get("invoice_id"),
                 "components_created": components_created,
                 "limitations_created": limitations_created
-            }
+            },
+            "mode": "REPORT" if is_maintenance_report else ("INVOICE" if is_invoice else "OTHER")
         }
         
     except Exception as e:
