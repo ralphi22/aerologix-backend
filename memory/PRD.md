@@ -30,7 +30,7 @@ AeroLogix AI is a backend aviation maintenance management system with AI-powered
 - ✅ Automatic data extraction
 - ✅ Deduplication on apply
 
-### 4. Critical Components Tracking (NEW - Jan 2026)
+### 4. Critical Components Tracking (Jan 2026)
 - ✅ `installed_components` MongoDB collection
 - ✅ Component extraction from OCR reports (keywords: engine, propeller, magneto, vacuum pump, overhaul, replaced)
 - ✅ `GET /api/components/critical/{aircraft_id}` - Returns component lifecycle data
@@ -39,17 +39,30 @@ AeroLogix AI is a backend aviation maintenance management system with AI-powered
 - ✅ `POST /api/components/critical/{aircraft_id}/reprocess` - Reprocess OCR history
 - ✅ MongoDB unique index on (aircraft_id, component_type, part_no, installed_at_hours)
 
-### 5. Transport Canada Integration
+### 5. TEA Operational Limitations Detection (NEW - Jan 2026)
+- ✅ `operational_limitations` MongoDB collection
+- ✅ Pattern-based detection from OCR reports:
+  - **ELT**: 25 NM, LIMITED TO 25, ELT REMOVED/EXPIRED/BATTERY EXPIRED
+  - **AVIONICS**: CONTROL ZONE, CONTROLLED AIRSPACE, PITOT, TRANSPONDER, MUST BE DONE BEFORE
+  - **GENERAL**: ON CONDITION, OVERDUE, NOT SERVICEABLE, RESTRICTED, LIMITED, GROUNDED
+- ✅ `GET /api/limitations/{aircraft_id}` - Returns all limitations
+- ✅ `GET /api/limitations/{aircraft_id}?category=ELT` - Filter by category
+- ✅ `GET /api/limitations/{aircraft_id}/summary` - Counts by category
+- ✅ `DELETE /api/limitations/{aircraft_id}/{limitation_id}` - Remove limitation
+- ✅ Stores RAW TEXT as written - NEVER transforms to status or calculates compliance
+- ✅ MongoDB unique index on (aircraft_id, report_id, limitation_text)
+
+### 6. Transport Canada Integration
 - ✅ TC Aircraft Registry import (~35,000 records)
 - ✅ Lookup API (`GET /api/tc/lookup`)
 - ✅ Search API (`GET /api/tc/search`)
 
-### 6. AD/SB Comparison Engine
+### 7. AD/SB Comparison Engine
 - ✅ Compare aircraft records against TC directives
 - ✅ Compliance status: FOUND, MISSING, DUE_SOON
 - ⚠️ Currently using seeded sample data (not full TC AD/SB dataset)
 
-### 7. Stripe Payments
+### 8. Stripe Payments
 - ✅ Checkout session creation
 - ✅ Webhook handling
 - ✅ Plan management (BASIC → PILOT → PILOT_PRO → FLEET)
@@ -72,12 +85,18 @@ AeroLogix AI is a backend aviation maintenance management system with AI-powered
 ### OCR
 - `POST /api/ocr/scan` - Scan document
 - `GET /api/ocr/{scan_id}` - Get scan results
-- `POST /api/ocr/apply/{scan_id}` - Apply OCR data (creates components)
+- `POST /api/ocr/apply/{scan_id}` - Apply OCR data (creates components + limitations)
 - `GET /api/ocr/check-duplicates/{scan_id}` - Check for duplicates
 
 ### Critical Components
 - `GET /api/components/critical/{aircraft_id}` - Get component lifecycle data
 - `POST /api/components/critical/{aircraft_id}/reprocess` - Reprocess OCR history
+
+### Operational Limitations (NEW)
+- `GET /api/limitations/{aircraft_id}` - Get all limitations
+- `GET /api/limitations/{aircraft_id}?category=ELT` - Filter by category
+- `GET /api/limitations/{aircraft_id}/summary` - Counts by category
+- `DELETE /api/limitations/{aircraft_id}/{limitation_id}` - Remove limitation
 
 ### Transport Canada
 - `GET /api/tc/lookup?registration={reg}` - Lookup aircraft in TC registry
@@ -133,6 +152,24 @@ AeroLogix AI is a backend aviation maintenance management system with AI-powered
 ```
 **Unique Index**: (aircraft_id, component_type, part_no, installed_at_hours)
 
+### operational_limitations (NEW)
+```json
+{
+  "_id": "ObjectId",
+  "aircraft_id": "string",
+  "user_id": "string",
+  "report_id": "string",
+  "limitation_text": "string (raw text as written by TEA)",
+  "detected_keywords": ["string"],
+  "category": "ELT|AVIONICS|PROPELLER|ENGINE|AIRFRAME|GENERAL",
+  "confidence": "number 0..1",
+  "source": "OCR",
+  "report_date": "datetime",
+  "created_at": "datetime"
+}
+```
+**Unique Index**: (aircraft_id, report_id, limitation_text)
+
 ### TC_Aeronefs
 ```json
 {
@@ -151,10 +188,8 @@ AeroLogix AI is a backend aviation maintenance management system with AI-powered
 - ✅ TC Aircraft Registry import (35,000 records)
 - ✅ TC Lookup/Search API
 - ✅ AD/SB Comparison Engine
-- ✅ **Mission Critical Components Feature**:
-  - OCR Intelligence service for component extraction
-  - Critical Components API with time calculations
-  - MongoDB indexes
+- ✅ **Mission Critical Components Feature** - OCR Intelligence for component extraction
+- ✅ **TEA Operational Limitations Detection** - Pattern-based limitation extraction
 
 ## Upcoming Tasks (P1)
 - Advanced OCR Candidate Extraction (date_candidates, registration_candidates, keyword_hits)
@@ -167,4 +202,5 @@ AeroLogix AI is a backend aviation maintenance management system with AI-powered
 ## Known Limitations
 - AD/SB engine uses sample seeded data, not full TC dataset
 - OCR component detection relies on keyword matching (may miss some patterns)
+- Limitation detection is pattern-based (may have false positives/negatives)
 - No frontend - backend only application
