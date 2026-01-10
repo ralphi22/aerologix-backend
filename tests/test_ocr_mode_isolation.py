@@ -45,6 +45,9 @@ class TestOCRModeIsolation:
         - NO records should be created in 'part_records'
         - NO records should be created in 'installed_components'
         """
+        import time
+        unique_suffix = int(time.time() * 1000)
+        
         # Get counts before
         parts_before = db_client.part_records.count_documents({
             "aircraft_id": self.aircraft_id,
@@ -57,11 +60,11 @@ class TestOCRModeIsolation:
             "aircraft_id": self.aircraft_id
         })
         
-        # Create OCR scan with invoice document type
+        # Create OCR scan with invoice document type (unique invoice number)
         scan_id = self._create_test_ocr_scan(
             document_type="invoice",
             extracted_data={
-                "invoice_number": "INV-TEST-001",
+                "invoice_number": f"INV-TEST-{unique_suffix}",
                 "invoice_date": "2024-01-15",
                 "vendor_name": "Aviation Parts Inc",
                 "subtotal": 1500.00,
