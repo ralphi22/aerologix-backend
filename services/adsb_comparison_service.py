@@ -65,14 +65,20 @@ class ADSBComparisonService:
         """
         Get all AD/SB references from OCR scans for an aircraft.
         
+        Priority:
+        1. Use last APPLIED scan date
+        2. Fallback to latest COMPLETED scan date (with warning log)
+        
         Returns:
             - List of AD/SB records from OCR
-            - Last applied scan date
+            - Last applied/scan date
         """
         adsb_records = []
+        last_applied_date = None
         last_scan_date = None
+        used_fallback = False
         
-        # Get all applied OCR scans for this aircraft
+        # Get all OCR scans for this aircraft (prioritize APPLIED)
         cursor = self.db.ocr_scans.find({
             "aircraft_id": aircraft_id,
             "user_id": user_id,
@@ -81,10 +87,15 @@ class ADSBComparisonService:
         
         async for scan in cursor:
             scan_date = scan.get("created_at")
+            scan_status = scan.get("status", "")
             
-            # Track last scan date
-            if last_scan_date is None:
-                last_scan_date = scan_date
+            # Track last applied date (priority) vs last scan date (fallback)
+            if scan_status == "APPLIED":
+                if last_applied_date is None:
+                    last_applied_date = scan_date
+            else:
+                if last_scan_date is None:
+                    last_scan_date = scan_date
             
             # Extract AD/SB references from extracted_data
             extracted = scan.get("extracted_data", {})
@@ -100,8 +111,22 @@ class ADSBComparisonService:
                             "airframe_hours": ref.get("airframe_hours"),
                             "description": ref.get("description"),
                             "scan_id": scan.get("_id"),
-                            "scan_date": scan_date
+                            "scan_date": scan_date,
+                            "source": "ocr"
                         })
+        
+        # Determine which date to use
+        if last_applied_date:
+            effective_date = last_applied_date
+        elif last_scan_date:
+            effective_date = last_scan_date
+            used_fallback = True
+            logger.warning(
+                f"No APPLIED scans found for aircraft {aircraft_id}, "
+                f"using latest COMPLETED scan date as fallback"
+            )
+        else:
+            effective_date = None
         
         # Also check adsb_records collection (manual entries)
         cursor = self.db.adsb_records.find({
