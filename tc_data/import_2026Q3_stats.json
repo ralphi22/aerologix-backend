@@ -1,0 +1,14 @@
+{
+  "tc_version": "2026Q3",
+  "dry_run": false,
+  "timestamp": "2026-01-10T14:53:41.076035",
+  "stats": {
+    "inserted": 34418,
+    "updated": 495,
+    "skipped": 5,
+    "errors": 0,
+    "total_processed": 34918,
+    "duration_seconds": 22.04,
+    "error_details": []
+  }
+}
