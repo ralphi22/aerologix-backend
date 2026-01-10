@@ -39,7 +39,7 @@ AeroLogix AI is a backend aviation maintenance management system with AI-powered
 - ✅ `POST /api/components/critical/{aircraft_id}/reprocess` - Reprocess OCR history
 - ✅ MongoDB unique index on (aircraft_id, component_type, part_no, installed_at_hours)
 
-### 5. TEA Operational Limitations Detection (NEW - Jan 2026)
+### 5. TEA Operational Limitations Detection (Jan 2026)
 - ✅ `operational_limitations` MongoDB collection
 - ✅ Pattern-based detection from OCR reports:
   - **ELT**: 25 NM, LIMITED TO 25, ELT REMOVED/EXPIRED/BATTERY EXPIRED
@@ -52,7 +52,33 @@ AeroLogix AI is a backend aviation maintenance management system with AI-powered
 - ✅ Stores RAW TEXT as written - NEVER transforms to status or calculates compliance
 - ✅ MongoDB unique index on (aircraft_id, report_id, limitation_text)
 
-### 6. Transport Canada Integration
+### 6. OCR Mode Isolation (NEW - Jan 2026)
+**INVOICE Mode** (document_type = "invoice"):
+- ❌ DISABLED: Parts extraction → `part_records`
+- ❌ DISABLED: Components extraction → `installed_components`
+- ❌ DISABLED: AD/SB extraction
+- ❌ DISABLED: Aircraft hours updates
+- ✅ ONLY: Financial data extraction → `invoices` collection
+- ✅ Output schema:
+  ```json
+  {
+    "vendor_name": "string",
+    "invoice_number": "string",
+    "invoice_date": "datetime",
+    "subtotal": "number",
+    "tax": "number",
+    "total": "number",
+    "currency": "CAD | USD",
+    "line_items": [{ "description", "part_number", "quantity", "unit_price", "line_total" }]
+  }
+  ```
+- ✅ Response includes `mode: "INVOICE"` field
+
+**REPORT Mode** (document_type = "report"):
+- ✅ Full technical extraction (parts, hours, AD/SB, limitations, components)
+- ✅ Response includes `mode: "REPORT"` field
+
+### 7. Transport Canada Integration
 - ✅ TC Aircraft Registry import (~35,000 records)
 - ✅ Lookup API (`GET /api/tc/lookup`)
 - ✅ Search API (`GET /api/tc/search`)
