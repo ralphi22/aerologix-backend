@@ -1,6 +1,13 @@
 """
 Script to create Stripe Products and Prices for AeroLogix AI
-Run once to set up the subscription products in Stripe.
+
+OFFICIAL PRICING (CAD):
+- PILOT: $24/month or $240/year
+- PILOT_PRO: $39/month or $390/year
+- FLEET: $65/month or $650/year
+
+Run once to set up the subscription products in Stripe:
+    python scripts/setup_stripe_products.py
 """
 
 import stripe
@@ -11,33 +18,67 @@ load_dotenv()
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
-# Product definitions
+
+# ============================================================
+# OFFICIAL PRODUCT DEFINITIONS
+# ============================================================
+
 PRODUCTS = [
     {
-        "name": "Solo",
-        "description": "Plan Solo - 1 aéronef, synchronisation de base",
-        "metadata": {"plan_id": "solo"},
+        "name": "Pilot",
+        "description": "AeroLogix Pilot - Pour pilotes propriétaires (1 aéronef)",
+        "metadata": {"plan_code": "PILOT"},
         "prices": [
-            {"unit_amount": 999, "currency": "cad", "interval": "month", "lookup_key": "solo_monthly"},
-            {"unit_amount": 9990, "currency": "cad", "interval": "year", "lookup_key": "solo_yearly"},
+            {
+                "unit_amount": 2400,  # $24.00 CAD
+                "currency": "cad",
+                "interval": "month",
+                "lookup_key": "pilot_monthly"
+            },
+            {
+                "unit_amount": 24000,  # $240.00 CAD
+                "currency": "cad",
+                "interval": "year",
+                "lookup_key": "pilot_yearly"
+            },
         ]
     },
     {
-        "name": "Maintenance Pro",
-        "description": "Plan Pro - Jusqu'à 3 aéronefs, partage TEA/AMO",
-        "metadata": {"plan_id": "pro"},
+        "name": "Pilot Pro",
+        "description": "AeroLogix Pilot Pro - Pour pilotes avec plusieurs aéronefs (jusqu'à 3)",
+        "metadata": {"plan_code": "PILOT_PRO"},
         "prices": [
-            {"unit_amount": 2499, "currency": "cad", "interval": "month", "lookup_key": "pro_monthly"},
-            {"unit_amount": 24990, "currency": "cad", "interval": "year", "lookup_key": "pro_yearly"},
+            {
+                "unit_amount": 3900,  # $39.00 CAD
+                "currency": "cad",
+                "interval": "month",
+                "lookup_key": "pilot_pro_monthly"
+            },
+            {
+                "unit_amount": 39000,  # $390.00 CAD
+                "currency": "cad",
+                "interval": "year",
+                "lookup_key": "pilot_pro_yearly"
+            },
         ]
     },
     {
-        "name": "Fleet AI",
-        "description": "Plan Fleet - Aéronefs illimités, vue Fleet complète",
-        "metadata": {"plan_id": "fleet"},
+        "name": "Fleet",
+        "description": "AeroLogix Fleet - Pour gestionnaires de flotte (aéronefs illimités)",
+        "metadata": {"plan_code": "FLEET"},
         "prices": [
-            {"unit_amount": 7999, "currency": "cad", "interval": "month", "lookup_key": "fleet_monthly"},
-            {"unit_amount": 79990, "currency": "cad", "interval": "year", "lookup_key": "fleet_yearly"},
+            {
+                "unit_amount": 6500,  # $65.00 CAD
+                "currency": "cad",
+                "interval": "month",
+                "lookup_key": "fleet_monthly"
+            },
+            {
+                "unit_amount": 65000,  # $650.00 CAD
+                "currency": "cad",
+                "interval": "year",
+                "lookup_key": "fleet_yearly"
+            },
         ]
     }
 ]
@@ -46,9 +87,14 @@ PRODUCTS = [
 def create_stripe_products():
     """Create products and prices in Stripe"""
     
-    print("=" * 50)
-    print("Creating Stripe Products and Prices")
-    print("=" * 50)
+    print("=" * 60)
+    print("AEROLOGIX AI - STRIPE PRODUCT SETUP")
+    print("=" * 60)
+    
+    if not stripe.api_key or stripe.api_key == "sk_test_placeholder":
+        print("\n❌ ERROR: STRIPE_SECRET_KEY not configured in .env")
+        print("   Please set a valid Stripe API key first.")
+        return None
     
     price_ids = {}
     
@@ -57,7 +103,7 @@ def create_stripe_products():
         
         # Check if product already exists
         existing_products = stripe.Product.search(
-            query=f"metadata['plan_id']:'{product_def['metadata']['plan_id']}'"
+            query=f"metadata['plan_code']:'{product_def['metadata']['plan_code']}'"
         )
         
         if existing_products.data:
@@ -91,21 +137,22 @@ def create_stripe_products():
                     currency=price_def["currency"],
                     recurring={"interval": price_def["interval"]},
                     lookup_key=lookup_key,
-                    metadata={"lookup_key": lookup_key}
+                    metadata={"lookup_key": lookup_key, "plan_code": product_def["metadata"]["plan_code"]}
                 )
                 print(f"   💰 Created price ({lookup_key}): {price.id}")
             
             price_ids[lookup_key] = price.id
     
-    print("\n" + "=" * 50)
-    print("✅ Setup Complete!")
-    print("=" * 50)
+    print("\n" + "=" * 60)
+    print("✅ SETUP COMPLETE")
+    print("=" * 60)
     print("\nAdd these Price IDs to your .env file:\n")
     
-    print(f"STRIPE_PRICE_SOLO_MONTHLY={price_ids.get('solo_monthly', 'NOT_CREATED')}")
-    print(f"STRIPE_PRICE_SOLO_YEARLY={price_ids.get('solo_yearly', 'NOT_CREATED')}")
-    print(f"STRIPE_PRICE_PRO_MONTHLY={price_ids.get('pro_monthly', 'NOT_CREATED')}")
-    print(f"STRIPE_PRICE_PRO_YEARLY={price_ids.get('pro_yearly', 'NOT_CREATED')}")
+    print(f"# Stripe Price IDs (UNIFIED PLAN_CODE SYSTEM)")
+    print(f"STRIPE_PRICE_PILOT_MONTHLY={price_ids.get('pilot_monthly', 'NOT_CREATED')}")
+    print(f"STRIPE_PRICE_PILOT_YEARLY={price_ids.get('pilot_yearly', 'NOT_CREATED')}")
+    print(f"STRIPE_PRICE_PILOT_PRO_MONTHLY={price_ids.get('pilot_pro_monthly', 'NOT_CREATED')}")
+    print(f"STRIPE_PRICE_PILOT_PRO_YEARLY={price_ids.get('pilot_pro_yearly', 'NOT_CREATED')}")
     print(f"STRIPE_PRICE_FLEET_MONTHLY={price_ids.get('fleet_monthly', 'NOT_CREATED')}")
     print(f"STRIPE_PRICE_FLEET_YEARLY={price_ids.get('fleet_yearly', 'NOT_CREATED')}")
     
