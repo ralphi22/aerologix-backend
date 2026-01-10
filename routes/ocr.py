@@ -406,9 +406,8 @@ async def scan_document(
     # Check and reset OCR usage if new month
     user_doc = await check_and_reset_ocr_usage(db, current_user.id, user_doc)
     
-    # Get OCR limit based on subscription plan
-    user_plan = user_doc.get("subscription", {}).get("plan", "BASIC")
-    ocr_limit = get_ocr_limit_for_plan(user_plan)
+    # Get OCR limit from user's limits (computed from plan_code)
+    ocr_limit = get_ocr_limit_from_user(user_doc)
     
     # Get current usage
     ocr_usage = user_doc.get("ocr_usage", {})
