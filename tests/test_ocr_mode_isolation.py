@@ -575,5 +575,24 @@ def get_invoice_by_id(db, invoice_id: str):
         return None
 
 
+def delete_invoice_by_id(db, invoice_id: str):
+    """Helper to delete invoice by ID (handles ObjectId conversion)"""
+    from bson import ObjectId
+    
+    if not invoice_id:
+        return
+    
+    # Try string ID first
+    result = db.invoices.delete_one({"_id": invoice_id})
+    if result.deleted_count > 0:
+        return
+    
+    # Try ObjectId
+    try:
+        db.invoices.delete_one({"_id": ObjectId(invoice_id)})
+    except:
+        pass
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
