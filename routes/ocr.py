@@ -1509,14 +1509,15 @@ async def get_ocr_quota_status(
     # Check and reset if needed
     user_doc = await check_and_reset_ocr_usage(db, current_user.id, user_doc)
     
-    # Get limit based on plan
-    user_plan = user_doc.get("subscription", {}).get("plan", "BASIC")
-    ocr_limit = get_ocr_limit_for_plan(user_plan)
+    # Get limit from user's limits (computed from plan_code)
+    ocr_limit = get_ocr_limit_from_user(user_doc)
+    plan_code = user_doc.get("subscription", {}).get("plan_code", "BASIC")
     
-    # Return only the limit (frontend doesn't need usage details)
+    # Return limit and plan info
     return {
         "limit": ocr_limit,
-        "plan": user_plan
+        "plan_code": plan_code,
+        "plan": user_doc.get("subscription", {}).get("plan", "BASIC")  # Legacy
     }
 
 
