@@ -174,7 +174,7 @@ class TestOCRModeIsolation:
         
         # Cleanup
         db_client.ocr_scans.delete_one({"_id": scan_id})
-        db_client.invoices.delete_one({"_id": invoice_id})
+        delete_invoice_by_id(db_client, invoice_id)
         
         print("✅ PASS: Invoice with parts list does NOT create part_records")
     
@@ -282,7 +282,7 @@ class TestOCRModeIsolation:
         
         # Cleanup
         db_client.ocr_scans.delete_one({"_id": scan_id})
-        db_client.invoices.delete_one({"_id": invoice_id})
+        delete_invoice_by_id(db_client, invoice_id)
         
         print("✅ PASS: Invoice stores financial data correctly")
     
@@ -328,7 +328,7 @@ class TestOCRModeIsolation:
         
         # Cleanup
         db_client.ocr_scans.delete_one({"_id": scan_id})
-        db_client.invoices.delete_one({"_id": invoice_id})
+        delete_invoice_by_id(db_client, invoice_id)
         
         print("✅ PASS: Invoice stores line_items as reference")
     
