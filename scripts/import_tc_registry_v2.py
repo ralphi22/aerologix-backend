@@ -47,6 +47,7 @@ BATCH_SIZE = 1000
 # ============================================================
 
 # carscurr.txt columns (0-indexed) - 47 columns total
+# Mapping basé sur carslayout.txt et vérification manuelle
 CURRCOLS = {
     "mark": 0,                    # Aircraft Mark (e.g., " AAC" -> C-GAAC)
     "common_name": 3,             # Manufacturer
@@ -55,7 +56,7 @@ CURRCOLS = {
     "serial_compressed": 6,       # Serial Number compressed
     "id_plate_manufacturer": 7,   # Manufacturer on ID Plate
     "aircraft_category": 10,      # Category (Aeroplane, Helicopter, etc.)
-    "engine_manufacturer": 14,    # Engine Manufacturer (skipping some columns)
+    "engine_manufacturer": 14,    # Engine Manufacturer
     "engine_category": 16,        # Engine Category
     "num_engines": 18,            # Number of Engines
     "num_seats": 19,              # Number of Seats
@@ -67,9 +68,10 @@ CURRCOLS = {
     "country_manufacture": 29,    # Country of Manufacture
     "date_manufacture": 32,       # Date Manufactured
     "base_province": 35,          # Base Province
-    "city_airport": 37,           # Base City/Airport
-    "type_certificate": 38,       # Type Certificate (designator)
-    "status": 39,                 # Registration Status
+    "city_airport": 36,           # Base City (was 37, corrected)
+    "type_certificate": 37,       # Type Certificate / Designator code (e.g., "2A13")
+    "status": 38,                 # Registration Status EN
+    "status_fr": 39,              # Registration Status FR
     "modified_date": 42,          # Last Modified Date
     "trimmed_mark": 46,           # Trimmed Mark (without spaces) - LAST COLUMN
 }
