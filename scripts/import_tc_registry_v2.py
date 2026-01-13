@@ -181,7 +181,7 @@ def load_owners(filepath: str) -> Dict[str, dict]:
     with open(filepath, 'r', encoding='latin-1', errors='replace') as f:
         reader = csv.reader(f)
         for row in reader:
-            if len(row) < 19:
+            if len(row) < 20:
                 continue
             
             mark = clean_string(row[OWNRCOLS["mark"]])
