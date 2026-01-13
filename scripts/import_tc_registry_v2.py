@@ -99,13 +99,26 @@ def normalize_registration(mark: str) -> str:
     """
     Normalize registration for search.
     Input: "AAC" or " AAC" or "FGSO"
-    Output: "CFGSO" (uppercase, no dash, no spaces)
+    Output: "CGAAC" or "CFGSO" (uppercase, no dash, no spaces)
+    
+    Marks à 3 lettres (AAC) → C-GAAC → CGAAC
+    Marks à 4 lettres (FGSO) → C-FGSO → CFGSO
     """
     mark = mark.strip().upper()
-    # Add C prefix if not present
+    
+    # Handle 3-letter marks (need G prefix)
+    if len(mark) == 3:
+        return f"CG{mark}"
+    
+    # Handle 4-letter marks
+    if len(mark) == 4:
+        if mark.startswith("C"):
+            return mark  # Already has C
+        return f"C{mark}"
+    
+    # Fallback: add C if not present, remove dashes
     if not mark.startswith("C"):
         mark = "C" + mark
-    # Remove any dashes
     mark = mark.replace("-", "")
     return mark
 
