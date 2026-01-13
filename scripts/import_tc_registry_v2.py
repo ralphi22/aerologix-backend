@@ -220,7 +220,8 @@ def import_aircraft(db, filepath: str, owners: Dict[str, dict]) -> int:
         reader = csv.reader(f)
         
         for row in reader:
-            if len(row) < 48:
+            # File has 47 columns
+            if len(row) < 47:
                 skipped += 1
                 continue
             
@@ -250,22 +251,22 @@ def import_aircraft(db, filepath: str, owners: Dict[str, dict]) -> int:
             
             # Additional fields
             aircraft_category = clean_string(row[CURRCOLS["aircraft_category"]])
-            engine_manufacturer = clean_string(row[CURRCOLS["engine_manufacturer"]])
-            engine_category = clean_string(row[CURRCOLS["engine_category"]])
-            num_engines = parse_int(row[CURRCOLS["num_engines"]])
-            num_seats = parse_int(row[CURRCOLS["num_seats"]])
-            weight_kg = parse_float(row[CURRCOLS["weight_kg"]])
+            engine_manufacturer = clean_string(row[CURRCOLS["engine_manufacturer"]]) if CURRCOLS["engine_manufacturer"] < len(row) else ""
+            engine_category = clean_string(row[CURRCOLS["engine_category"]]) if CURRCOLS["engine_category"] < len(row) else ""
+            num_engines = parse_int(row[CURRCOLS["num_engines"]]) if CURRCOLS["num_engines"] < len(row) else None
+            num_seats = parse_int(row[CURRCOLS["num_seats"]]) if CURRCOLS["num_seats"] < len(row) else None
+            weight_kg = parse_float(row[CURRCOLS["weight_kg"]]) if CURRCOLS["weight_kg"] < len(row) else None
             
-            issue_date = parse_date(row[CURRCOLS["issue_date"]])
-            effective_date = parse_date(row[CURRCOLS["effective_date"]])
-            date_manufacture = parse_date(row[CURRCOLS["date_manufacture"]])
-            modified_date = parse_date(row[CURRCOLS["modified_date"]])
+            issue_date = parse_date(row[CURRCOLS["issue_date"]]) if CURRCOLS["issue_date"] < len(row) else None
+            effective_date = parse_date(row[CURRCOLS["effective_date"]]) if CURRCOLS["effective_date"] < len(row) else None
+            date_manufacture = parse_date(row[CURRCOLS["date_manufacture"]]) if CURRCOLS["date_manufacture"] < len(row) else None
+            modified_date = parse_date(row[CURRCOLS["modified_date"]]) if CURRCOLS["modified_date"] < len(row) else None
             
-            base_province = clean_string(row[CURRCOLS["base_province"]])
-            city_airport = clean_string(row[CURRCOLS["city_airport"]])
-            country_manufacture = clean_string(row[CURRCOLS["country_manufacture"]])
-            status = clean_string(row[CURRCOLS["status"]])
-            purpose = clean_string(row[CURRCOLS["purpose"]])
+            base_province = clean_string(row[CURRCOLS["base_province"]]) if CURRCOLS["base_province"] < len(row) else ""
+            city_airport = clean_string(row[CURRCOLS["city_airport"]]) if CURRCOLS["city_airport"] < len(row) else ""
+            country_manufacture = clean_string(row[CURRCOLS["country_manufacture"]]) if CURRCOLS["country_manufacture"] < len(row) else ""
+            status = clean_string(row[CURRCOLS["status"]]) if CURRCOLS["status"] < len(row) else ""
+            purpose = clean_string(row[CURRCOLS["purpose"]]) if CURRCOLS["purpose"] < len(row) else ""
             
             # Build document
             doc = {
