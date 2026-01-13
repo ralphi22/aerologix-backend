@@ -74,7 +74,7 @@ CURRCOLS = {
     "trimmed_mark": 46,           # Trimmed Mark (without spaces) - LAST COLUMN
 }
 
-# carsownr.txt columns (0-indexed)
+# carsownr.txt columns (0-indexed) - 20 columns total
 OWNRCOLS = {
     "mark": 0,                    # Aircraft Mark (link key)
     "full_name": 1,               # Owner Full Name
@@ -83,9 +83,9 @@ OWNRCOLS = {
     "city": 5,                    # City
     "province": 6,                # Province
     "postal_code": 8,             # Postal Code
-    "country": 9,                 # Country
+    "country": 10,                # Country (short form)
     "owner_type": 11,             # Individual/Entity
-    "trimmed_mark": 18,           # Trimmed Mark
+    "trimmed_mark": 19,           # Trimmed Mark - LAST COLUMN
 }
 
 
