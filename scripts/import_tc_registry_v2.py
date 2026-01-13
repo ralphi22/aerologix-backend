@@ -46,16 +46,16 @@ BATCH_SIZE = 1000
 # COLUMN MAPPINGS (from carslayout.txt)
 # ============================================================
 
-# carscurr.txt columns (0-indexed)
+# carscurr.txt columns (0-indexed) - 47 columns total
 CURRCOLS = {
-    "mark": 0,                    # Aircraft Mark (e.g., "AAC" -> C-GAAC)
+    "mark": 0,                    # Aircraft Mark (e.g., " AAC" -> C-GAAC)
     "common_name": 3,             # Manufacturer
     "model_name": 4,              # Model
     "serial_number": 5,           # Serial Number
     "serial_compressed": 6,       # Serial Number compressed
     "id_plate_manufacturer": 7,   # Manufacturer on ID Plate
     "aircraft_category": 10,      # Category (Aeroplane, Helicopter, etc.)
-    "engine_manufacturer": 14,    # Engine Manufacturer
+    "engine_manufacturer": 14,    # Engine Manufacturer (skipping some columns)
     "engine_category": 16,        # Engine Category
     "num_engines": 18,            # Number of Engines
     "num_seats": 19,              # Number of Seats
@@ -71,7 +71,7 @@ CURRCOLS = {
     "type_certificate": 38,       # Type Certificate (designator)
     "status": 39,                 # Registration Status
     "modified_date": 42,          # Last Modified Date
-    "trimmed_mark": 47,           # Trimmed Mark (without spaces)
+    "trimmed_mark": 46,           # Trimmed Mark (without spaces) - LAST COLUMN
 }
 
 # carsownr.txt columns (0-indexed)
