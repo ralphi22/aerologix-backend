@@ -32,7 +32,7 @@ from pymongo.errors import BulkWriteError
 # CONFIGURATION
 # ============================================================
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "tc_data_new")
+DATA_DIR = "/app/backend/tc_data_new"
 CARSCURR_FILE = os.path.join(DATA_DIR, "carscurr.txt")
 CARSOWNR_FILE = os.path.join(DATA_DIR, "carsownr.txt")
 
