@@ -67,6 +67,7 @@ app.include_router(pilot_invites.router)
 app.include_router(users.router)
 app.include_router(tc.router)
 app.include_router(limitations.router)
+app.include_router(revenuecat.router)
 
 @app.get("/")
 async def root():
