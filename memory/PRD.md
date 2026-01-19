@@ -1,232 +1,80 @@
-# AeroLogix AI - Product Requirements Document
+# AeroLogix AI - TC AD/SB Monthly Detection Mechanism
 
-## Overview
-AeroLogix AI is a backend aviation maintenance management system with AI-powered document processing.
+## Problem Statement
+Implement a monthly backend mechanism to detect newly published Transport Canada AD/SB applicable to each aircraft and expose a simple alert flag for the frontend. This mechanism must be informational only and TC-safe.
 
-## Tech Stack
-- **Backend**: FastAPI (Python 3.11)
-- **Database**: MongoDB (motor async driver)
-- **Authentication**: JWT
-- **Payments**: Stripe
-- **AI/OCR**: OpenAI GPT-4.1-mini (Vision API)
+## Architecture
 
-## Core Features
+### Data Flow
+1. Monthly TC AD/SB data import (manual CSV/JSON)
+2. Detection service compares TC AD/SB refs vs aircraft designators
+3. New items → set `adsb_has_new_tc_items = true` on aircraft
+4. User views AD/SB module → clear alert + audit log
 
-### 1. User Management
-- ✅ JWT-based authentication (signup/login)
-- ✅ User profile management
-- ✅ GDPR-compliant account deletion (`DELETE /api/users/me`)
-- ✅ Plan-based limits (BASIC, PILOT, PILOT_PRO, FLEET)
+### Collections
+- `aircrafts` - Extended with alert fields
+- `tc_ad` / `tc_sb` - TC AD/SB regulatory items
+- `tc_aircraft` - TC Registry for designator lookup
+- `tc_adsb_audit_log` - Audit trail for all detection events
 
-### 2. Aircraft Management
-- ✅ CRUD operations for aircraft
-- ✅ Aircraft hours tracking (airframe, engine, propeller)
-- ✅ Plan-based aircraft limits
+## User Personas
+- **Aircraft Owners**: View alert flag on aircraft dashboard
+- **AME/TEA**: Access detailed AD/SB module for compliance work
+- **Admin**: Trigger monthly detection, view audit logs
 
-### 3. OCR Document Processing
-- ✅ Maintenance report scanning
-- ✅ Invoice scanning
-- ✅ STC document scanning
-- ✅ Automatic data extraction
-- ✅ Deduplication on apply
+## Core Requirements (Static)
+1. ✅ Store last TC review state per aircraft
+2. ✅ Detect new AD/SB by comparing against known refs
+3. ✅ Create alert flag (`adsb_has_new_tc_items`, `count_new_adsb`)
+4. ✅ Clear alert when user views AD/SB module
+5. ✅ API exposure of alert flag in aircraft response
+6. ✅ Audit logging for TC-safety
 
-### 4. Critical Components Tracking (Jan 2026)
-- ✅ `installed_components` MongoDB collection
-- ✅ Component extraction from OCR reports (keywords: engine, propeller, magneto, vacuum pump, overhaul, replaced)
-- ✅ `GET /api/components/critical/{aircraft_id}` - Returns component lifecycle data
-- ✅ Time calculations: `time_since_install`, `remaining` (TBO-based)
-- ✅ Status: OK, WARNING (<100h), CRITICAL (<50h), OVERDUE (<=0)
-- ✅ `POST /api/components/critical/{aircraft_id}/reprocess` - Reprocess OCR history
-- ✅ MongoDB unique index on (aircraft_id, component_type, part_no, installed_at_hours)
+## What's Been Implemented (2026-01-19)
+- **Models**: `tc_adsb_alert.py` - Alert and audit models
+- **Service**: `tc_adsb_detection_service.py` - Detection logic
+- **Routes**: `tc_adsb_detection.py` - API endpoints
+- **Integration**: Auto-clear in structured AD/SB endpoint
+- **Aircraft Model Extension**: Alert fields added
 
-### 5. TEA Operational Limitations Detection (Jan 2026)
-- ✅ `operational_limitations` MongoDB collection
-- ✅ Pattern-based detection from OCR reports:
-  - **ELT**: 25 NM, LIMITED TO 25, ELT REMOVED/EXPIRED/BATTERY EXPIRED
-  - **AVIONICS**: CONTROL ZONE, CONTROLLED AIRSPACE, PITOT, TRANSPONDER, MUST BE DONE BEFORE
-  - **GENERAL**: ON CONDITION, OVERDUE, NOT SERVICEABLE, RESTRICTED, LIMITED, GROUNDED
-- ✅ `GET /api/limitations/{aircraft_id}` - Returns all limitations
-- ✅ `GET /api/limitations/{aircraft_id}?category=ELT` - Filter by category
-- ✅ `GET /api/limitations/{aircraft_id}/summary` - Counts by category
-- ✅ `DELETE /api/limitations/{aircraft_id}/{limitation_id}` - Remove limitation
-- ✅ Stores RAW TEXT as written - NEVER transforms to status or calculates compliance
-- ✅ MongoDB unique index on (aircraft_id, report_id, limitation_text)
+### API Endpoints
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/tc-adsb/detect` | POST | Yes | Trigger detection for user's aircraft |
+| `/api/tc-adsb/detect-all` | POST | Yes | System-wide detection (admin) |
+| `/api/tc-adsb/detect-scheduled` | POST | No* | Monthly cron endpoint |
+| `/api/tc-adsb/alert/{id}` | GET | Yes | Get alert status |
+| `/api/tc-adsb/mark-reviewed/{id}` | POST | Yes | Clear alert |
+| `/api/tc-adsb/audit-log` | GET | Yes | View audit trail |
+| `/api/tc-adsb/version` | GET | No | Current TC version |
 
-### 6. OCR Mode Isolation (NEW - Jan 2026)
-**INVOICE Mode** (document_type = "invoice"):
-- ❌ DISABLED: Parts extraction → `part_records`
-- ❌ DISABLED: Components extraction → `installed_components`
-- ❌ DISABLED: AD/SB extraction
-- ❌ DISABLED: Aircraft hours updates
-- ✅ ONLY: Financial data extraction → `invoices` collection
-- ✅ Output schema:
-  ```json
-  {
-    "vendor_name": "string",
-    "invoice_number": "string",
-    "invoice_date": "datetime",
-    "subtotal": "number",
-    "tax": "number",
-    "total": "number",
-    "currency": "CAD | USD",
-    "line_items": [{ "description", "part_number", "quantity", "unit_price", "line_total" }]
-  }
-  ```
-- ✅ Response includes `mode: "INVOICE"` field
+*scheduled endpoint accepts API key for cron authentication
 
-**REPORT Mode** (document_type = "report"):
-- ✅ Full technical extraction (parts, hours, AD/SB, limitations, components)
-- ✅ Response includes `mode: "REPORT"` field
+## Prioritized Backlog
 
-### 7. Transport Canada Integration
-- ✅ TC Aircraft Registry import (~35,000 records)
-- ✅ Lookup API (`GET /api/tc/lookup`)
-- ✅ Search API (`GET /api/tc/search`)
+### P0 (Done)
+- [x] Detection service with designator-based lookup
+- [x] Alert flag management
+- [x] Auto-clear on module view
+- [x] Audit logging
 
-### 7. AD/SB Comparison Engine
-- ✅ Compare aircraft records against TC directives
-- ✅ Compliance status: FOUND, MISSING, DUE_SOON
-- ⚠️ Currently using seeded sample data (not full TC AD/SB dataset)
+### P1 (Future)
+- [ ] Render cron job configuration for monthly trigger
+- [ ] Email notification option (optional, user-controlled)
+- [ ] Dashboard widget for alert count
 
-### 8. Stripe Payments
-- ✅ Checkout session creation
-- ✅ Webhook handling
-- ✅ Plan management (BASIC → PILOT → PILOT_PRO → FLEET)
+### P2 (Enhancements)
+- [ ] Filter audit log by date range
+- [ ] Export audit log to CSV
+- [ ] Admin dashboard for detection status
 
-## API Endpoints Summary
+## Test Coverage
+- All 27 backend tests passed (100%)
+- Test user: test@aerologix.ca
+- Test aircraft: C-FGSO (Cessna 152)
 
-### Authentication
-- `POST /api/auth/signup` - Create account
-- `POST /api/auth/login` - OAuth2 form login
-- `GET /api/auth/me` - Current user profile
-- `DELETE /api/users/me` - Delete account (GDPR)
-
-### Aircraft
-- `GET /api/aircraft` - List user's aircraft
-- `POST /api/aircraft` - Create aircraft
-- `GET /api/aircraft/{id}` - Get aircraft details
-- `PUT /api/aircraft/{id}` - Update aircraft
-- `DELETE /api/aircraft/{id}` - Delete aircraft
-
-### OCR
-- `POST /api/ocr/scan` - Scan document
-- `GET /api/ocr/{scan_id}` - Get scan results
-- `POST /api/ocr/apply/{scan_id}` - Apply OCR data (creates components + limitations)
-- `GET /api/ocr/check-duplicates/{scan_id}` - Check for duplicates
-
-### Critical Components
-- `GET /api/components/critical/{aircraft_id}` - Get component lifecycle data
-- `POST /api/components/critical/{aircraft_id}/reprocess` - Reprocess OCR history
-
-### Operational Limitations (NEW)
-- `GET /api/limitations/{aircraft_id}` - Get all limitations
-- `GET /api/limitations/{aircraft_id}?category=ELT` - Filter by category
-- `GET /api/limitations/{aircraft_id}/summary` - Counts by category
-- `DELETE /api/limitations/{aircraft_id}/{limitation_id}` - Remove limitation
-
-### Transport Canada
-- `GET /api/tc/lookup?registration={reg}` - Lookup aircraft in TC registry
-- `GET /api/tc/search?q={query}` - Search TC registry
-
-### AD/SB
-- `GET /api/adsb/compare/{aircraft_id}` - Compare against TC directives
-
-## Database Collections
-
-### users
-```json
-{
-  "_id": "string",
-  "email": "string",
-  "hashed_password": "string",
-  "name": "string",
-  "subscription": { "plan_code": "BASIC|PILOT|PILOT_PRO|FLEET", "status": "string" },
-  "limits": { "max_aircrafts": "number", "ocr_per_month": "number" }
-}
-```
-
-### aircrafts
-```json
-{
-  "_id": "string",
-  "user_id": "string",
-  "registration": "string",
-  "airframe_hours": "number",
-  "engine_hours": "number",
-  "propeller_hours": "number"
-}
-```
-
-### installed_components
-```json
-{
-  "_id": "ObjectId",
-  "aircraft_id": "string",
-  "user_id": "string",
-  "component_type": "ENGINE|PROP|MAGNETO|VACUUM_PUMP|LLP|STARTER|ALTERNATOR",
-  "part_no": "string",
-  "serial_no": "string (optional)",
-  "description": "string",
-  "installed_at_hours": "number",
-  "installed_date": "datetime",
-  "tbo": "number (optional)",
-  "source_report_id": "string",
-  "confidence": "number 0..1",
-  "created_at": "datetime",
-  "updated_at": "datetime"
-}
-```
-**Unique Index**: (aircraft_id, component_type, part_no, installed_at_hours)
-
-### operational_limitations (NEW)
-```json
-{
-  "_id": "ObjectId",
-  "aircraft_id": "string",
-  "user_id": "string",
-  "report_id": "string",
-  "limitation_text": "string (raw text as written by TEA)",
-  "detected_keywords": ["string"],
-  "category": "ELT|AVIONICS|PROPELLER|ENGINE|AIRFRAME|GENERAL",
-  "confidence": "number 0..1",
-  "source": "OCR",
-  "report_date": "datetime",
-  "created_at": "datetime"
-}
-```
-**Unique Index**: (aircraft_id, report_id, limitation_text)
-
-### TC_Aeronefs
-```json
-{
-  "_id": "string (registration)",
-  "manufacturer": "string",
-  "model": "string",
-  "tc_version": "number"
-}
-```
-
-## Completed Work (Jan 2026)
-
-### Session 1 (Jan 10, 2026)
-- ✅ User account deletion endpoint
-- ✅ Stripe integration overhaul (unified plan_codes)
-- ✅ TC Aircraft Registry import (35,000 records)
-- ✅ TC Lookup/Search API
-- ✅ AD/SB Comparison Engine
-- ✅ **Mission Critical Components Feature** - OCR Intelligence for component extraction
-- ✅ **TEA Operational Limitations Detection** - Pattern-based limitation extraction
-
-## Upcoming Tasks (P1)
-- Advanced OCR Candidate Extraction (date_candidates, registration_candidates, keyword_hits)
-
-## Future Tasks (P2-P3)
-- Automate TC Registry import (quarterly)
-- Import real TC AD/SB data
-- Generic TC Search endpoint enhancement
-
-## Known Limitations
-- AD/SB engine uses sample seeded data, not full TC dataset
-- OCR component detection relies on keyword matching (may miss some patterns)
-- Limitation detection is pattern-based (may have false positives/negatives)
-- No frontend - backend only application
+## TC-Safety Compliance
+- NO compliance decisions made
+- Only factual "new TC publication exists"
+- All events auditable
+- Clear disclaimer on all responses
