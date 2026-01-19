@@ -184,46 +184,31 @@ class ADSBComparisonService:
     
     async def get_tc_requirements(
         self,
-        designator: Optional[str],
-        manufacturer: Optional[str],
-        model: Optional[str]
+        designator: str
     ) -> List[Dict]:
         """
         Get all applicable TC AD/SB requirements for an aircraft.
         
-        Matches by:
-        - Designator (type certificate)
-        - Manufacturer
-        - Model (partial match)
+        CRITICAL: Uses ONLY designator for lookup.
+        NO manufacturer, NO model, NO registration fallbacks.
+        
+        Args:
+            designator: Type certificate designator (must be pre-validated)
+            
+        Returns:
+            List of applicable TC AD/SB requirements
         """
         requirements = []
         
-        # Build query for TC_AD
-        ad_query = {"is_active": True}
-        sb_query = {"is_active": True}
+        # DEFENSIVE: Log the exact key being used
+        logger.info(f"TC AD/SB lookup using designator={designator}")
         
-        # Match by designator OR manufacturer
-        or_conditions = []
+        # Query TC AD collection - DESIGNATOR ONLY
+        ad_query = {
+            "designator": designator,
+            "is_active": True
+        }
         
-        if designator:
-            or_conditions.append({"designator": designator})
-        
-        if manufacturer:
-            # Case-insensitive partial match
-            or_conditions.append({
-                "manufacturer": {"$regex": manufacturer, "$options": "i"}
-            })
-        
-        if model:
-            or_conditions.append({
-                "model": {"$regex": model, "$options": "i"}
-            })
-        
-        if or_conditions:
-            ad_query["$or"] = or_conditions
-            sb_query["$or"] = or_conditions
-        
-        # Get ADs
         async for ad in self.db.tc_ad.find(ad_query):
             requirements.append({
                 "ref": ad.get("ref"),
@@ -239,7 +224,12 @@ class ADSBComparisonService:
                 "source_url": ad.get("source_url"),
             })
         
-        # Get SBs
+        # Query TC SB collection - DESIGNATOR ONLY
+        sb_query = {
+            "designator": designator,
+            "is_active": True
+        }
+        
         async for sb in self.db.tc_sb.find(sb_query):
             requirements.append({
                 "ref": sb.get("ref"),
@@ -255,6 +245,8 @@ class ADSBComparisonService:
                 "source_url": sb.get("source_url"),
                 "is_mandatory": sb.get("is_mandatory", False),
             })
+        
+        logger.info(f"TC AD/SB lookup completed | designator={designator} | items_found={len(requirements)}")
         
         return requirements
     
