@@ -370,6 +370,9 @@ class ADSBComparisonService:
         Main comparison function.
         
         Compares aircraft OCR records against TC AD/SB database.
+        
+        FAIL-FAST: If designator is missing or invalid, returns empty
+        result with appropriate error message.
         """
         logger.info(f"AD/SB Comparison started | aircraft_id={aircraft_id}")
         
@@ -384,6 +387,36 @@ class ADSBComparisonService:
         model = aircraft.get("model") or aircraft.get("tc_model")
         registration = aircraft.get("registration")
         
+        # FAIL-FAST: Validate designator before any TC AD/SB lookup
+        if not self._is_valid_designator(designator):
+            logger.error(
+                f"AD/SB lookup aborted: missing or invalid designator | "
+                f"aircraft_id={aircraft_id} | registration={registration} | "
+                f"designator_value={designator!r}"
+            )
+            
+            # Return empty response - NO lookup performed
+            return ADSBComparisonResponse(
+                aircraft_id=aircraft_id,
+                registration=registration,
+                designator=None,
+                manufacturer=manufacturer,
+                model=model,
+                last_logbook_date=None,
+                total_tc_items=0,
+                found_count=0,
+                missing_count=0,
+                new_tc_items=[],
+                comparison=[],
+                disclaimer=(
+                    "AD/SB lookup unavailable. Aircraft type certificate designator "
+                    "could not be determined from Transport Canada Registry. "
+                    "Verification with Transport Canada and a licensed AME is required."
+                )
+            )
+        
+        logger.info(f"TC AD/SB lookup started | designator={designator}")
+        
         # Get OCR records
         ocr_records, last_logbook_date = await self.get_ocr_adsb_records(
             aircraft_id, user_id
@@ -391,10 +424,8 @@ class ADSBComparisonService:
         
         logger.info(f"Found {len(ocr_records)} OCR AD/SB records")
         
-        # Get TC requirements
-        tc_requirements = await self.get_tc_requirements(
-            designator, manufacturer, model
-        )
+        # Get TC requirements - DESIGNATOR ONLY (no fallbacks)
+        tc_requirements = await self.get_tc_requirements(designator)
         
         logger.info(f"Found {len(tc_requirements)} TC requirements for designator={designator}")
         
