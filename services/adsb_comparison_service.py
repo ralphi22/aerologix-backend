@@ -60,9 +60,9 @@ class ADSBComparisonService:
     
     async def get_aircraft_info(self, aircraft_id: str, user_id: str) -> Optional[Dict]:
         """
-        Get aircraft information including designator.
+        Get aircraft information including designator from TC Registry.
         
-        First checks user's aircraft, then falls back to TC registry.
+        First checks user's aircraft, then looks up TC Registry for authoritative identity.
         """
         # Get from user's aircraft collection
         aircraft = await self.db.aircrafts.find_one({
@@ -73,17 +73,21 @@ class ADSBComparisonService:
         if not aircraft:
             return None
         
-        # If no designator in user aircraft, try TC lookup
-        if not aircraft.get("designator"):
-            registration = aircraft.get("registration", "")
-            if registration:
-                tc_aircraft = await self.db.tc_aeronefs.find_one({
-                    "registration": registration.upper()
-                })
-                if tc_aircraft:
-                    aircraft["designator"] = tc_aircraft.get("designator")
-                    aircraft["tc_manufacturer"] = tc_aircraft.get("manufacturer")
-                    aircraft["tc_model"] = tc_aircraft.get("model")
+        # ALWAYS look up TC Registry for authoritative designator
+        registration = aircraft.get("registration", "")
+        if registration:
+            # Normalize registration for lookup
+            reg_norm = registration.strip().upper().replace("-", "")
+            if not reg_norm.startswith("C"):
+                reg_norm = "C" + reg_norm
+            
+            tc_aircraft = await self.db.tc_aircraft.find_one(
+                {"registration_norm": reg_norm}
+            )
+            if tc_aircraft:
+                aircraft["designator"] = tc_aircraft.get("designator")
+                aircraft["tc_manufacturer"] = tc_aircraft.get("manufacturer")
+                aircraft["tc_model"] = tc_aircraft.get("model")
         
         return aircraft
     
