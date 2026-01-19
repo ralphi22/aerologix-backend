@@ -52,6 +52,7 @@ app.include_router(aircraft.router)
 app.include_router(ocr.router)
 app.include_router(maintenance.router)
 app.include_router(adsb.router)
+app.include_router(adsb.aircraft_adsb_router)  # Alias routes for /api/aircraft/{id}/adsb
 app.include_router(stc.router)
 app.include_router(parts.router)
 app.include_router(elt.router)
