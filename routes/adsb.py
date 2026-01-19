@@ -202,7 +202,7 @@ async def _delete_adsb_by_id(
                 "_id": ObjectId(record_id),
                 "user_id": current_user.id
             })
-        except:
+        except Exception:
             pass
     
     if not record:
