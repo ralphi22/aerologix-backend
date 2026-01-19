@@ -63,6 +63,12 @@ class AircraftIdentity(BaseModel):
     tc_source: str = "TC Registry"
 
 
+class LookupStatus(str, Enum):
+    """Status of TC AD/SB lookup"""
+    SUCCESS = "SUCCESS"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
 class StructuredComparisonResponse(BaseModel):
     """TC-Safe structured comparison response"""
     aircraft_identity: AircraftIdentity
@@ -74,6 +80,8 @@ class StructuredComparisonResponse(BaseModel):
     total_sb_with_evidence: int
     ocr_documents_analyzed: int
     analysis_date: str
+    lookup_status: LookupStatus = LookupStatus.SUCCESS
+    lookup_unavailable_reason: Optional[str] = None
     disclaimer: str
 
 
@@ -98,8 +106,47 @@ class StructuredADSBComparisonService:
         "AeroLogix AI does not determine aircraft airworthiness status."
     )
     
+    # Invalid designator values that must trigger fail-fast
+    INVALID_DESIGNATORS = frozenset(["", "AUCUN", "N/A", "NONE", "NULL", "UNKNOWN"])
+    
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
+    
+    # --------------------------------------------------------
+    # DESIGNATOR VALIDATION (FAIL-FAST)
+    # --------------------------------------------------------
+    
+    def _is_valid_designator(self, designator: Optional[str]) -> bool:
+        """
+        Validate that designator is usable for TC AD/SB lookup.
+        
+        FAIL-FAST: Returns False for any invalid value.
+        
+        Invalid values:
+        - None
+        - Empty string
+        - Whitespace only
+        - "Aucun", "N/A", "None", etc.
+        - Registration patterns (C-XXXX)
+        """
+        if designator is None:
+            return False
+        
+        cleaned = designator.strip().upper()
+        
+        # Empty or whitespace
+        if not cleaned:
+            return False
+        
+        # Known invalid placeholders
+        if cleaned in self.INVALID_DESIGNATORS:
+            return False
+        
+        # Block registration patterns (C-XXXX or CXXXX)
+        if cleaned.startswith("C-") or (cleaned.startswith("C") and len(cleaned) == 5 and cleaned[1:].isalpha()):
+            return False
+        
+        return True
     
     # --------------------------------------------------------
     # STEP 1: TC REGISTRY LOOKUP
