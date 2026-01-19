@@ -110,7 +110,6 @@ class ADSBComparisonService:
         adsb_records = []
         last_applied_date = None
         last_scan_date = None
-        used_fallback = False
         
         # Get all OCR scans for this aircraft (prioritize APPLIED)
         cursor = self.db.ocr_scans.find({
