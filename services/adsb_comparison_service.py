@@ -154,7 +154,6 @@ class ADSBComparisonService:
             effective_date = last_applied_date
         elif last_scan_date:
             effective_date = last_scan_date
-            used_fallback = True
             logger.warning(
                 f"No APPLIED scans found for aircraft {aircraft_id}, "
                 f"using latest COMPLETED scan date as fallback"
