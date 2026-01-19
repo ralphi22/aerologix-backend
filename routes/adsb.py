@@ -532,8 +532,8 @@ async def aircraft_adsb_compare_alias(
 @aircraft_adsb_router.get(
     "/{aircraft_id}/adsb/structured",
     response_model=StructuredComparisonResponse,
-    summary="Structured AD/SB Comparison (aircraft-nested route)",
-    description="Alias for /api/adsb/structured/{aircraft_id}. Returns TC-safe structured AD/SB comparison."
+    summary="[DEPRECATED] Structured AD/SB Comparison (aircraft-nested route)",
+    description="⚠️ DEPRECATED: Use /api/adsb/structured/{aircraft_id} instead."
 )
 async def aircraft_adsb_structured_alias(
     aircraft_id: str,
@@ -541,10 +541,11 @@ async def aircraft_adsb_structured_alias(
     db=Depends(get_database)
 ):
     """
+    DEPRECATED: Use /api/adsb/structured/{aircraft_id} instead.
     Alias endpoint for structured AD/SB comparison under aircraft path.
-    Forwards to the main structured comparison service.
     """
-    logger.info(f"Structured AD/SB Compare (aircraft alias) | aircraft_id={aircraft_id} | user={current_user.id}")
+    # DEPRECATION WARNING LOG
+    logger.warning(f"Deprecated AD/SB endpoint used: /api/aircraft/{aircraft_id}/adsb/structured | user={current_user.id}")
     
     # Get aircraft registration from user's aircraft
     aircraft = await db.aircrafts.find_one({
@@ -570,7 +571,7 @@ async def aircraft_adsb_structured_alias(
         detection_service = TCADSBDetectionService(db)
         try:
             await detection_service.mark_adsb_reviewed(aircraft_id, current_user.id)
-            logger.info(f"AD/SB alert cleared on module view (aircraft alias) | aircraft_id={aircraft_id}")
+            logger.info(f"AD/SB alert cleared on module view (deprecated alias) | aircraft_id={aircraft_id}")
         except Exception as e:
             logger.warning(f"Failed to mark AD/SB reviewed: {e}")
         
@@ -583,7 +584,7 @@ async def aircraft_adsb_structured_alias(
         )
         
         logger.info(
-            f"Structured AD/SB Compare complete (aircraft alias) | registration={registration} | "
+            f"Structured AD/SB Compare complete (deprecated alias) | registration={registration} | "
             f"ADs={result.total_applicable_ad} ({result.total_ad_with_evidence} with evidence) | "
             f"SBs={result.total_applicable_sb} ({result.total_sb_with_evidence} with evidence)"
         )
