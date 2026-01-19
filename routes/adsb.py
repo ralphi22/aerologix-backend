@@ -282,8 +282,12 @@ async def get_adsb_summary(
 
 
 # ============================================================
-# TC AD/SB COMPARISON ENDPOINT (LEGACY)
 # ============================================================
+# DEPRECATED: TC AD/SB COMPARISON ENDPOINT (LEGACY)
+# ============================================================
+# DEPRECATED: compatibility alias for older frontend builds
+# Use /api/adsb/structured/{aircraft_id} instead
+# This endpoint remains functional but is not recommended for new usage
 
 from services.adsb_comparison_service import ADSBComparisonService
 from models.tc_adsb import ADSBComparisonResponse
@@ -292,19 +296,18 @@ from models.tc_adsb import ADSBComparisonResponse
 @router.get(
     "/compare/{aircraft_id}",
     response_model=ADSBComparisonResponse,
-    summary="Compare aircraft records against TC AD/SB database (Legacy)",
+    summary="[DEPRECATED] Compare aircraft records against TC AD/SB database",
     description="""
+    **⚠️ DEPRECATED: Use /api/adsb/structured/{aircraft_id} instead**
+    
+    This endpoint remains functional for backward compatibility.
+    
     Compares aircraft OCR/manual records against Transport Canada AD/SB database.
     
     **TC-SAFE:** This endpoint does NOT determine compliance status.
     It only provides factual comparison data for informational purposes.
     
     All airworthiness decisions must be made by a licensed AME/TEA.
-    
-    **Returns:**
-    - List of TC requirements with found/missing status
-    - New regulatory items since last logbook entry
-    - Recurrence calculations for periodic inspections
     """
 )
 async def compare_adsb(
@@ -313,10 +316,14 @@ async def compare_adsb(
     db=Depends(get_database)
 ):
     """
-    Compare aircraft AD/SB records against Transport Canada requirements.
+    DEPRECATED: Use structured_adsb_compare instead.
     
+    Compare aircraft AD/SB records against Transport Canada requirements.
     TC-SAFE: Never returns compliance status.
     """
+    # DEPRECATION WARNING LOG
+    logger.warning(f"Deprecated AD/SB endpoint used: /api/adsb/compare/{aircraft_id} | user={current_user.id}")
+    
     logger.info(f"AD/SB Compare | aircraft_id={aircraft_id} | user={current_user.id}")
     
     try:
