@@ -189,21 +189,21 @@ class StructuredADSBComparisonService:
         )
     
     # --------------------------------------------------------
-    # STEP 2: TC AD/SB APPLICABILITY LOOKUP
+    # STEP 2: TC AD/SB APPLICABILITY LOOKUP (DESIGNATOR ONLY)
     # --------------------------------------------------------
     
     async def get_applicable_tc_adsb(
         self, 
-        identity: AircraftIdentity
+        designator: str
     ) -> Tuple[List[Dict], List[Dict]]:
         """
-        Get applicable AD/SB from TC database based on aircraft identity.
+        Get applicable AD/SB from TC database based on aircraft designator.
         
-        Uses ONLY manufacturer, model, and designator from TC Registry.
-        NO loose keyword matching.
+        CRITICAL: Uses ONLY designator for lookup.
+        NO manufacturer, NO model, NO registration fallbacks.
         
         Args:
-            identity: AircraftIdentity from TC Registry lookup
+            designator: Type certificate designator (e.g., "3A19")
             
         Returns:
             Tuple of (applicable_ads, applicable_sbs)
@@ -211,32 +211,12 @@ class StructuredADSBComparisonService:
         applicable_ads = []
         applicable_sbs = []
         
-        # Build query based on aircraft identity
-        # Match by designator (most specific) OR manufacturer+model
-        query_conditions = []
+        # DEFENSIVE: Log the exact key being used
+        logger.info(f"TC AD/SB lookup using designator={designator}")
         
-        if identity.designator:
-            query_conditions.append({"designator": identity.designator})
-        
-        if identity.manufacturer:
-            # Match manufacturer AND model contains aircraft model
-            mfr_lower = identity.manufacturer.lower()
-            model_lower = identity.model.lower() if identity.model else ""
-            
-            query_conditions.append({
-                "$and": [
-                    {"manufacturer": {"$regex": f"^{re.escape(identity.manufacturer)}", "$options": "i"}},
-                    {"model": {"$regex": re.escape(model_lower.split()[0]) if model_lower else ".*", "$options": "i"}}
-                ]
-            })
-        
-        if not query_conditions:
-            logger.warning(f"No query conditions for aircraft: {identity.registration}")
-            return [], []
-        
-        # Query TC AD collection
+        # Query TC AD collection - DESIGNATOR ONLY
         ad_query = {
-            "$or": query_conditions,
+            "designator": designator,
             "is_active": True
         }
         
@@ -251,9 +231,9 @@ class StructuredADSBComparisonService:
                 "source_url": ad.get("source_url"),
             })
         
-        # Query TC SB collection
+        # Query TC SB collection - DESIGNATOR ONLY
         sb_query = {
-            "$or": query_conditions,
+            "designator": designator,
             "is_active": True
         }
         
@@ -270,8 +250,8 @@ class StructuredADSBComparisonService:
             })
         
         logger.info(
-            f"TC AD/SB lookup for {identity.registration}: "
-            f"{len(applicable_ads)} ADs, {len(applicable_sbs)} SBs applicable"
+            f"TC AD/SB lookup completed | designator={designator} | "
+            f"ADs={len(applicable_ads)} | SBs={len(applicable_sbs)}"
         )
         
         return applicable_ads, applicable_sbs
