@@ -282,7 +282,7 @@ async def get_adsb_summary(
 
 
 # ============================================================
-# TC AD/SB COMPARISON ENDPOINT
+# TC AD/SB COMPARISON ENDPOINT (LEGACY)
 # ============================================================
 
 from services.adsb_comparison_service import ADSBComparisonService
@@ -292,7 +292,7 @@ from models.tc_adsb import ADSBComparisonResponse
 @router.get(
     "/compare/{aircraft_id}",
     response_model=ADSBComparisonResponse,
-    summary="Compare aircraft records against TC AD/SB database",
+    summary="Compare aircraft records against TC AD/SB database (Legacy)",
     description="""
     Compares aircraft OCR/manual records against Transport Canada AD/SB database.
     
@@ -341,4 +341,107 @@ async def compare_adsb(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to compare AD/SB records"
+        )
+
+
+# ============================================================
+# TC-SAFE STRUCTURED AD/SB COMPARISON ENDPOINT (NEW)
+# ============================================================
+
+from services.structured_adsb_service import (
+    StructuredADSBComparisonService,
+    StructuredComparisonResponse
+)
+
+
+@router.get(
+    "/structured/{aircraft_id}",
+    response_model=StructuredComparisonResponse,
+    summary="TC-Safe Structured AD/SB Comparison",
+    description="""
+    **TC-SAFE STRUCTURED COMPARISON**
+    
+    Performs a factual comparison between TC AD/SB requirements and OCR documentary evidence.
+    
+    **DATA FLOW:**
+    1. Registration → TC Registry lookup (authoritative identity)
+    2. TC Registry → aircraft identity (manufacturer, model, designator)
+    3. Aircraft identity → TC AD/SB applicability lookup
+    4. TC AD/SB → comparison against OCR-applied references
+    
+    **IMPORTANT:**
+    - This is INFORMATIONAL ONLY
+    - NO compliance decision is made
+    - NO "compliant" / "non-compliant" language
+    - All airworthiness decisions must be made by a licensed AME/TEA
+    
+    **Returns:**
+    - aircraft_identity: From TC Registry
+    - tc_ad_list: Applicable ADs with detection counts
+    - tc_sb_list: Applicable SBs with detection counts
+    - Each item shows detected_count from OCR documents
+    """
+)
+async def structured_adsb_compare(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    TC-Safe Structured AD/SB Comparison.
+    
+    Uses TC Registry as authoritative source for aircraft identity.
+    Uses TC AD/SB database as authoritative source for applicability.
+    Uses OCR documents as documentary evidence only.
+    
+    NO compliance decision is made.
+    """
+    logger.info(f"Structured AD/SB Compare | aircraft_id={aircraft_id} | user={current_user.id}")
+    
+    # Get aircraft registration from user's aircraft
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aircraft not found"
+        )
+    
+    registration = aircraft.get("registration")
+    if not registration:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Aircraft registration is required for TC comparison"
+        )
+    
+    try:
+        service = StructuredADSBComparisonService(db)
+        result = await service.compare(
+            registration=registration,
+            aircraft_id=aircraft_id,
+            user_id=current_user.id
+        )
+        
+        logger.info(
+            f"Structured AD/SB Compare complete | registration={registration} | "
+            f"ADs={result.total_applicable_ad} ({result.total_ad_with_evidence} with evidence) | "
+            f"SBs={result.total_applicable_sb} ({result.total_sb_with_evidence} with evidence)"
+        )
+        
+        return result
+        
+    except ValueError as e:
+        logger.warning(f"Structured AD/SB Compare failed | registration={registration} | error={e}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Structured AD/SB Compare error | registration={registration} | error={e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to perform structured AD/SB comparison"
         )
