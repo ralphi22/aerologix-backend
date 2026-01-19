@@ -479,9 +479,13 @@ class StructuredADSBComparisonService:
         
         DATA FLOW:
         1. Registration → TC Registry lookup
-        2. TC Registry → aircraft identity
-        3. Aircraft identity → TC AD/SB applicability
-        4. TC AD/SB → comparison against OCR references
+        2. TC Registry → aircraft identity (including designator)
+        3. VALIDATE designator (FAIL-FAST if invalid)
+        4. Designator → TC AD/SB applicability lookup
+        5. TC AD/SB → comparison against OCR references
+        
+        FAIL-FAST: If designator is missing or invalid, returns empty
+        result with lookup_status=UNAVAILABLE.
         
         Args:
             registration: Aircraft registration (e.g., "C-FGSO")
@@ -502,13 +506,43 @@ class StructuredADSBComparisonService:
                 "Cannot perform AD/SB comparison without authoritative aircraft identity."
             )
         
-        # STEP 2: Get applicable TC AD/SB
-        applicable_ads, applicable_sbs = await self.get_applicable_tc_adsb(identity)
+        # STEP 2: FAIL-FAST - Validate designator before any TC AD/SB lookup
+        if not self._is_valid_designator(identity.designator):
+            logger.error(
+                f"AD/SB lookup aborted: missing or invalid designator | "
+                f"aircraft_id={aircraft_id} | registration={registration} | "
+                f"designator_value={identity.designator!r}"
+            )
+            
+            # Return structured response with UNAVAILABLE status
+            return StructuredComparisonResponse(
+                aircraft_identity=identity,
+                tc_ad_list=[],
+                tc_sb_list=[],
+                total_applicable_ad=0,
+                total_applicable_sb=0,
+                total_ad_with_evidence=0,
+                total_sb_with_evidence=0,
+                ocr_documents_analyzed=0,
+                analysis_date=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                lookup_status=LookupStatus.UNAVAILABLE,
+                lookup_unavailable_reason="Aircraft designator not resolved from Transport Canada Registry",
+                disclaimer=(
+                    "AD/SB lookup unavailable. Aircraft type certificate designator "
+                    "could not be determined from Transport Canada Registry. "
+                    "Verification with Transport Canada and a licensed AME is required."
+                )
+            )
         
-        # STEP 3: Get OCR references
+        logger.info(f"TC AD/SB lookup started | designator={identity.designator}")
+        
+        # STEP 3: Get applicable TC AD/SB (DESIGNATOR ONLY)
+        applicable_ads, applicable_sbs = await self.get_applicable_tc_adsb(identity.designator)
+        
+        # STEP 4: Get OCR references
         ocr_references, doc_count = await self.get_ocr_adsb_references(aircraft_id, user_id)
         
-        # STEP 4: Count detections
+        # STEP 5: Count detections
         ad_results = self._count_detections(applicable_ads, ocr_references)
         sb_results = self._count_detections(applicable_sbs, ocr_references)
         
@@ -532,5 +566,7 @@ class StructuredADSBComparisonService:
             total_sb_with_evidence=sb_with_evidence,
             ocr_documents_analyzed=doc_count,
             analysis_date=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            lookup_status=LookupStatus.SUCCESS,
+            lookup_unavailable_reason=None,
             disclaimer=self.DISCLAIMER
         )
