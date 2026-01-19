@@ -460,7 +460,7 @@ class ADSBComparisonService:
                 if isinstance(last_recorded_date, str):
                     try:
                         last_compliance_dt = datetime.strptime(last_recorded_date, "%Y-%m-%d")
-                    except:
+                    except ValueError:
                         pass
                 elif isinstance(last_recorded_date, datetime):
                     last_compliance_dt = last_recorded_date
