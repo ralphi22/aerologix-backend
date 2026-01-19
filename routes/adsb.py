@@ -458,3 +458,133 @@ async def structured_adsb_compare(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to perform structured AD/SB comparison"
         )
+
+
+
+# ============================================================
+# ROUTE ALIASES FOR FRONTEND COMPATIBILITY
+# ============================================================
+# These aliases ensure the backend exposes endpoints that match
+# various frontend URL patterns without duplicating logic.
+
+from fastapi import APIRouter as AliasRouter
+
+# Create a separate router for /api/aircraft/{aircraft_id}/adsb pattern
+aircraft_adsb_router = AliasRouter(prefix="/api/aircraft", tags=["aircraft-adsb"])
+
+
+@aircraft_adsb_router.get(
+    "/{aircraft_id}/adsb/compare",
+    response_model=ADSBComparisonResponse,
+    summary="AD/SB Comparison (aircraft-nested route)",
+    description="Alias for /api/adsb/compare/{aircraft_id}. Returns TC AD/SB comparison."
+)
+async def aircraft_adsb_compare_alias(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    Alias endpoint for AD/SB comparison under aircraft path.
+    Forwards to the main comparison service.
+    """
+    logger.info(f"AD/SB Compare (aircraft alias) | aircraft_id={aircraft_id} | user={current_user.id}")
+    
+    try:
+        service = ADSBComparisonService(db)
+        result = await service.compare(aircraft_id, current_user.id)
+        
+        logger.info(
+            f"AD/SB Compare complete (aircraft alias) | aircraft_id={aircraft_id} | "
+            f"found={result.found_count} | missing={result.missing_count}"
+        )
+        
+        return result
+        
+    except ValueError as e:
+        logger.warning(f"AD/SB Compare failed (aircraft alias) | aircraft_id={aircraft_id} | error={e}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"AD/SB Compare error (aircraft alias) | aircraft_id={aircraft_id} | error={e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to compare AD/SB records"
+        )
+
+
+@aircraft_adsb_router.get(
+    "/{aircraft_id}/adsb/structured",
+    response_model=StructuredComparisonResponse,
+    summary="Structured AD/SB Comparison (aircraft-nested route)",
+    description="Alias for /api/adsb/structured/{aircraft_id}. Returns TC-safe structured AD/SB comparison."
+)
+async def aircraft_adsb_structured_alias(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    Alias endpoint for structured AD/SB comparison under aircraft path.
+    Forwards to the main structured comparison service.
+    """
+    logger.info(f"Structured AD/SB Compare (aircraft alias) | aircraft_id={aircraft_id} | user={current_user.id}")
+    
+    # Get aircraft registration from user's aircraft
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aircraft not found"
+        )
+    
+    registration = aircraft.get("registration")
+    if not registration:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Aircraft registration is required for TC comparison"
+        )
+    
+    try:
+        # Mark as reviewed (clear alert flag) - TC-SAFE auditable action
+        detection_service = TCADSBDetectionService(db)
+        try:
+            await detection_service.mark_adsb_reviewed(aircraft_id, current_user.id)
+            logger.info(f"AD/SB alert cleared on module view (aircraft alias) | aircraft_id={aircraft_id}")
+        except Exception as e:
+            logger.warning(f"Failed to mark AD/SB reviewed: {e}")
+        
+        # Perform structured comparison
+        service = StructuredADSBComparisonService(db)
+        result = await service.compare(
+            registration=registration,
+            aircraft_id=aircraft_id,
+            user_id=current_user.id
+        )
+        
+        logger.info(
+            f"Structured AD/SB Compare complete (aircraft alias) | registration={registration} | "
+            f"ADs={result.total_applicable_ad} ({result.total_ad_with_evidence} with evidence) | "
+            f"SBs={result.total_applicable_sb} ({result.total_sb_with_evidence} with evidence)"
+        )
+        
+        return result
+        
+    except ValueError as e:
+        logger.warning(f"Structured AD/SB Compare failed (aircraft alias) | registration={registration} | error={e}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Structured AD/SB Compare error (aircraft alias) | registration={registration} | error={e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to perform structured AD/SB comparison"
+        )
