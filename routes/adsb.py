@@ -473,24 +473,24 @@ async def structured_adsb_compare(
         )
 
 
-
 # ============================================================
-# ROUTE ALIASES FOR FRONTEND COMPATIBILITY
+# DEPRECATED: ROUTE ALIASES FOR FRONTEND COMPATIBILITY
 # ============================================================
-# These aliases ensure the backend exposes endpoints that match
-# various frontend URL patterns without duplicating logic.
+# DEPRECATED: compatibility aliases for older frontend builds
+# Use /api/adsb/structured/{aircraft_id} instead
+# These endpoints remain functional but are not recommended for new usage
 
 from fastapi import APIRouter as AliasRouter
 
 # Create a separate router for /api/aircraft/{aircraft_id}/adsb pattern
-aircraft_adsb_router = AliasRouter(prefix="/api/aircraft", tags=["aircraft-adsb"])
+aircraft_adsb_router = AliasRouter(prefix="/api/aircraft", tags=["aircraft-adsb-deprecated"])
 
 
 @aircraft_adsb_router.get(
     "/{aircraft_id}/adsb/compare",
     response_model=ADSBComparisonResponse,
-    summary="AD/SB Comparison (aircraft-nested route)",
-    description="Alias for /api/adsb/compare/{aircraft_id}. Returns TC AD/SB comparison."
+    summary="[DEPRECATED] AD/SB Comparison (aircraft-nested route)",
+    description="⚠️ DEPRECATED: Use /api/adsb/structured/{aircraft_id} instead."
 )
 async def aircraft_adsb_compare_alias(
     aircraft_id: str,
@@ -498,30 +498,31 @@ async def aircraft_adsb_compare_alias(
     db=Depends(get_database)
 ):
     """
+    DEPRECATED: Use /api/adsb/structured/{aircraft_id} instead.
     Alias endpoint for AD/SB comparison under aircraft path.
-    Forwards to the main comparison service.
     """
-    logger.info(f"AD/SB Compare (aircraft alias) | aircraft_id={aircraft_id} | user={current_user.id}")
+    # DEPRECATION WARNING LOG
+    logger.warning(f"Deprecated AD/SB endpoint used: /api/aircraft/{aircraft_id}/adsb/compare | user={current_user.id}")
     
     try:
         service = ADSBComparisonService(db)
         result = await service.compare(aircraft_id, current_user.id)
         
         logger.info(
-            f"AD/SB Compare complete (aircraft alias) | aircraft_id={aircraft_id} | "
+            f"AD/SB Compare complete (deprecated alias) | aircraft_id={aircraft_id} | "
             f"found={result.found_count} | missing={result.missing_count}"
         )
         
         return result
         
     except ValueError as e:
-        logger.warning(f"AD/SB Compare failed (aircraft alias) | aircraft_id={aircraft_id} | error={e}")
+        logger.warning(f"AD/SB Compare failed (deprecated alias) | aircraft_id={aircraft_id} | error={e}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
         )
     except Exception as e:
-        logger.error(f"AD/SB Compare error (aircraft alias) | aircraft_id={aircraft_id} | error={e}")
+        logger.error(f"AD/SB Compare error (deprecated alias) | aircraft_id={aircraft_id} | error={e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to compare AD/SB records"
