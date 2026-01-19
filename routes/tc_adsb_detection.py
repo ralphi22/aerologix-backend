@@ -233,14 +233,20 @@ async def get_alert_status(
         )
 
 
+# ============================================================
+# DEPRECATED: Mark AD/SB as reviewed
+# ============================================================
+# DEPRECATED: Use /api/adsb/mark-reviewed/{aircraft_id} instead
+# This endpoint remains functional for backward compatibility
+
 @router.post(
     "/mark-reviewed/{aircraft_id}",
     response_model=MarkReviewedResponse,
-    summary="Mark AD/SB module as reviewed",
+    summary="[DEPRECATED] Mark AD/SB module as reviewed",
     description="""
-    Mark the AD/SB module as reviewed for an aircraft.
+    **⚠️ DEPRECATED: Use /api/adsb/mark-reviewed/{aircraft_id} instead**
     
-    **Called when:** User opens/views the AD/SB module.
+    Mark the AD/SB module as reviewed for an aircraft.
     
     **Effect:**
     - Sets `last_adsb_reviewed_at` to current timestamp
@@ -256,11 +262,10 @@ async def mark_reviewed(
     db: AsyncIOMotorDatabase = Depends(get_database)
 ):
     """
-    Mark AD/SB as reviewed for an aircraft.
-    
-    Clears the alert flag and records the review timestamp.
+    DEPRECATED: Use /api/adsb/mark-reviewed/{aircraft_id} instead.
     """
-    logger.info(f"Mark AD/SB reviewed | aircraft={aircraft_id} | user={current_user.id}")
+    # DEPRECATION WARNING LOG
+    logger.warning(f"Deprecated AD/SB endpoint used: /api/tc-adsb/mark-reviewed/{aircraft_id} | user={current_user.id}")
     
     service = TCADSBDetectionService(db)
     
