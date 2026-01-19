@@ -20,6 +20,12 @@ class AircraftBase(BaseModel):
     
     # Description optionnelle
     description: Optional[str] = None
+    
+    # TC AD/SB Alert Fields (informational only)
+    adsb_has_new_tc_items: bool = False
+    count_new_adsb: int = 0
+    last_tc_adsb_version: Optional[str] = None
+    last_adsb_reviewed_at: Optional[datetime] = None
 
 class AircraftCreate(AircraftBase):
     pass
