@@ -352,6 +352,7 @@ from services.structured_adsb_service import (
     StructuredADSBComparisonService,
     StructuredComparisonResponse
 )
+from services.tc_adsb_detection_service import TCADSBDetectionService
 
 
 @router.get(
@@ -395,6 +396,8 @@ async def structured_adsb_compare(
     Uses OCR documents as documentary evidence only.
     
     NO compliance decision is made.
+    
+    SIDE EFFECT: Marks AD/SB as reviewed (clears alert flag).
     """
     logger.info(f"Structured AD/SB Compare | aircraft_id={aircraft_id} | user={current_user.id}")
     
@@ -418,6 +421,16 @@ async def structured_adsb_compare(
         )
     
     try:
+        # Mark as reviewed (clear alert flag) - TC-SAFE auditable action
+        detection_service = TCADSBDetectionService(db)
+        try:
+            await detection_service.mark_adsb_reviewed(aircraft_id, current_user.id)
+            logger.info(f"AD/SB alert cleared on module view | aircraft_id={aircraft_id}")
+        except Exception as e:
+            # Don't fail comparison if mark-reviewed fails
+            logger.warning(f"Failed to mark AD/SB reviewed: {e}")
+        
+        # Perform structured comparison
         service = StructuredADSBComparisonService(db)
         result = await service.compare(
             registration=registration,
