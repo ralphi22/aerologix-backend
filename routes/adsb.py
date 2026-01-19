@@ -352,8 +352,10 @@ async def compare_adsb(
 
 
 # ============================================================
-# TC-SAFE STRUCTURED AD/SB COMPARISON ENDPOINT (NEW)
+# CANONICAL ENDPOINT: TC-SAFE STRUCTURED AD/SB COMPARISON
 # ============================================================
+# THIS IS THE OFFICIAL AD/SB ENDPOINT FOR FRONTEND USAGE
+# All other AD/SB comparison endpoints are deprecated aliases
 
 from services.structured_adsb_service import (
     StructuredADSBComparisonService,
@@ -365,16 +367,16 @@ from services.tc_adsb_detection_service import TCADSBDetectionService
 @router.get(
     "/structured/{aircraft_id}",
     response_model=StructuredComparisonResponse,
-    summary="TC-Safe Structured AD/SB Comparison",
+    summary="TC-Safe Structured AD/SB Comparison [CANONICAL]",
     description="""
-    **TC-SAFE STRUCTURED COMPARISON**
+    **✅ CANONICAL ENDPOINT - USE THIS FOR AD/SB COMPARISON**
     
     Performs a factual comparison between TC AD/SB requirements and OCR documentary evidence.
     
     **DATA FLOW:**
     1. Registration → TC Registry lookup (authoritative identity)
     2. TC Registry → aircraft identity (manufacturer, model, designator)
-    3. Aircraft identity → TC AD/SB applicability lookup
+    3. Designator → TC AD/SB applicability lookup (FAIL-FAST if invalid)
     4. TC AD/SB → comparison against OCR-applied references
     
     **IMPORTANT:**
@@ -387,7 +389,10 @@ from services.tc_adsb_detection_service import TCADSBDetectionService
     - aircraft_identity: From TC Registry
     - tc_ad_list: Applicable ADs with detection counts
     - tc_sb_list: Applicable SBs with detection counts
+    - lookup_status: SUCCESS or UNAVAILABLE (if designator invalid)
     - Each item shows detected_count from OCR documents
+    
+    **SIDE EFFECT:** Clears AD/SB alert badge on aircraft.
     """
 )
 async def structured_adsb_compare(
@@ -396,17 +401,18 @@ async def structured_adsb_compare(
     db=Depends(get_database)
 ):
     """
-    TC-Safe Structured AD/SB Comparison.
+    CANONICAL ENDPOINT: TC-Safe Structured AD/SB Comparison.
     
     Uses TC Registry as authoritative source for aircraft identity.
     Uses TC AD/SB database as authoritative source for applicability.
     Uses OCR documents as documentary evidence only.
     
+    FAIL-FAST: Returns UNAVAILABLE if designator is missing/invalid.
     NO compliance decision is made.
     
     SIDE EFFECT: Marks AD/SB as reviewed (clears alert flag).
     """
-    logger.info(f"Structured AD/SB Compare | aircraft_id={aircraft_id} | user={current_user.id}")
+    logger.info(f"[CANONICAL] Structured AD/SB Compare | aircraft_id={aircraft_id} | user={current_user.id}")
     
     # Get aircraft registration from user's aircraft
     aircraft = await db.aircrafts.find_one({
