@@ -474,6 +474,54 @@ async def structured_adsb_compare(
 
 
 # ============================================================
+# CANONICAL: MARK AD/SB AS REVIEWED
+# ============================================================
+# This endpoint clears the AD/SB alert badge when user views the module
+
+from models.tc_adsb_alert import MarkReviewedResponse
+
+
+@router.post(
+    "/mark-reviewed/{aircraft_id}",
+    response_model=MarkReviewedResponse,
+    summary="Mark AD/SB module as reviewed [CANONICAL]",
+    description="""
+    **✅ CANONICAL ENDPOINT - MARK AD/SB AS REVIEWED**
+    
+    Clears the AD/SB alert badge for an aircraft after user views the module.
+    
+    **Effect:**
+    - Sets `adsb_has_new_tc_items = false`
+    - Sets `count_new_adsb = 0`
+    - Records `last_adsb_reviewed_at` timestamp
+    
+    **Audit:** This action is logged for traceability.
+    """
+)
+async def mark_adsb_reviewed(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    CANONICAL ENDPOINT: Mark AD/SB as reviewed for an aircraft.
+    
+    Clears the alert flag and records the review timestamp.
+    """
+    logger.info(f"[CANONICAL] AD/SB mark-reviewed endpoint hit | aircraft_id={aircraft_id} | user={current_user.id}")
+    
+    try:
+        service = TCADSBDetectionService(db)
+        result = await service.mark_adsb_reviewed(aircraft_id, current_user.id)
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+
+
+# ============================================================
 # DEPRECATED: ROUTE ALIASES FOR FRONTEND COMPATIBILITY
 # ============================================================
 # DEPRECATED: compatibility aliases for older frontend builds
