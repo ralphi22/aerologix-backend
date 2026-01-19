@@ -25,8 +25,38 @@ logger = logging.getLogger(__name__)
 class ADSBComparisonService:
     """Service for comparing aircraft records against TC AD/SB database"""
     
+    # Invalid designator values that must trigger fail-fast
+    INVALID_DESIGNATORS = frozenset(["", "AUCUN", "N/A", "NONE", "NULL", "UNKNOWN"])
+    
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
+    
+    # --------------------------------------------------------
+    # DESIGNATOR VALIDATION (FAIL-FAST)
+    # --------------------------------------------------------
+    
+    def _is_valid_designator(self, designator: Optional[str]) -> bool:
+        """
+        Validate that designator is usable for TC AD/SB lookup.
+        
+        FAIL-FAST: Returns False for any invalid value.
+        """
+        if designator is None:
+            return False
+        
+        cleaned = designator.strip().upper()
+        
+        if not cleaned:
+            return False
+        
+        if cleaned in self.INVALID_DESIGNATORS:
+            return False
+        
+        # Block registration patterns
+        if cleaned.startswith("C-") or (cleaned.startswith("C") and len(cleaned) == 5 and cleaned[1:].isalpha()):
+            return False
+        
+        return True
     
     async def get_aircraft_info(self, aircraft_id: str, user_id: str) -> Optional[Dict]:
         """
