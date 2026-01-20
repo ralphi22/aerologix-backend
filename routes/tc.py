@@ -233,24 +233,16 @@ def format_registration(norm_reg: str) -> str:
     return f"C-{norm_reg[1:]}"
 
 
-def extract_year_from_date(date_value) -> Optional[int]:
-    """
-    Extract year from date field.
-    
-    Returns integer year or None if invalid/absent.
-    """
+def format_date(date_value) -> Optional[str]:
+    """Format date to ISO string or return None."""
     if date_value is None:
         return None
-    
     try:
-        if hasattr(date_value, 'year'):
-            return date_value.year
-        if isinstance(date_value, str) and len(date_value) >= 4:
-            return int(date_value[:4])
-    except (ValueError, TypeError):
-        pass
-    
-    return None
+        if hasattr(date_value, 'strftime'):
+            return date_value.strftime("%Y-%m-%d")
+        return str(date_value)
+    except Exception:
+        return None
 
 
 # ============================================================
@@ -276,10 +268,7 @@ def extract_year_from_date(date_value) -> Optional[int]:
     
     **Returns:** Public registration data from TC Registry.
     
-    **STRICT RULES:**
-    - If a field is absent in DB → null is returned
-    - NO invented/calculated values
-    - NO silent fallbacks
+    **FIELD MAPPING:** DB fields (French) are mapped to English API schema.
     """
 )
 async def lookup_aircraft(
@@ -295,7 +284,7 @@ async def lookup_aircraft(
     """
     Lookup an aircraft in the Transport Canada registry.
     
-    Read-only endpoint. No authentication required.
+    Uses centralized FR→EN mapping.
     """
     # Validate and normalize registration
     try:
@@ -311,13 +300,16 @@ async def lookup_aircraft(
             }
         )
     
-    # Lookup in tc_aircraft collection by registration_norm
-    aircraft = await db.tc_aircraft.find_one(
-        {"registration_norm": registration_norm},
-        {"_id": 0}  # Exclude MongoDB _id
-    )
+    # Lookup in tc_aircraft collection
+    # Try both French and English field names for registration_norm
+    doc = await db.tc_aircraft.find_one({
+        "$or": [
+            {"norme d'enregistrement": registration_norm},
+            {"registration_norm": registration_norm}
+        ]
+    })
     
-    if not aircraft:
+    if not doc:
         display_reg = format_registration(registration_norm)
         logger.info(f"[TC LOOKUP] Not found: {display_reg}")
         raise HTTPException(
@@ -329,76 +321,26 @@ async def lookup_aircraft(
             }
         )
     
-    # Build response from DB fields - NO INVENTED VALUES
-    fields_returned = []
+    # Apply centralized FR→EN mapping
+    mapped = map_tc_aircraft(doc)
     
-    # Extract values from DB document
-    reg = aircraft.get("registration")
-    reg_norm = aircraft.get("registration_norm")
-    manufacturer = aircraft.get("manufacturer")
-    model = aircraft.get("model")
-    designator = aircraft.get("designator")
-    serial_number = aircraft.get("serial_number")
-    owner_name = aircraft.get("owner_name")
-    status_val = aircraft.get("status")
-    num_engines = aircraft.get("num_engines")
-    num_seats = aircraft.get("num_seats")
+    # Format dates
+    if mapped.get("issued_date"):
+        mapped["issued_date"] = format_date(mapped["issued_date"])
+    if mapped.get("last_modified"):
+        mapped["last_modified"] = format_date(mapped["last_modified"])
     
-    # Mapped fields
-    category = aircraft.get("aircraft_category")
-    engine_type = aircraft.get("engine_category")
-    max_weight_kg = aircraft.get("weight_kg")
-    base_of_operations = aircraft.get("city_airport")
+    # Set type_certificate alias
+    mapped["type_certificate"] = mapped.get("designator")
     
-    # Year extraction from date_manufacture
-    year = extract_year_from_date(aircraft.get("date_manufacture"))
-    
-    # Track which fields have values
-    for field, value in [
-        ("registration", reg),
-        ("registration_norm", reg_norm),
-        ("manufacturer", manufacturer),
-        ("model", model),
-        ("designator", designator),
-        ("serial_number", serial_number),
-        ("owner_name", owner_name),
-        ("status", status_val),
-        ("num_engines", num_engines),
-        ("num_seats", num_seats),
-        ("category", category),
-        ("engine_type", engine_type),
-        ("max_weight_kg", max_weight_kg),
-        ("base_of_operations", base_of_operations),
-        ("year", year),
-    ]:
-        if value is not None:
-            fields_returned.append(field)
-    
-    # AUDIT LOG - List all fields returned
+    # AUDIT LOG - List non-null fields
+    non_null_fields = [k for k, v in mapped.items() if v is not None]
     logger.info(
-        f"[TC LOOKUP] registration={reg} | "
-        f"fields_returned=[{', '.join(fields_returned)}]"
+        f"[TC LOOKUP MAPPED] {mapped.get('registration')} | "
+        f"non_null_fields={non_null_fields}"
     )
     
-    # Build response - type_certificate is alias for designator
-    return TCLookupResponse(
-        registration=reg,
-        registration_norm=reg_norm,
-        manufacturer=manufacturer,
-        model=model,
-        designator=designator,
-        serial_number=serial_number,
-        year=year,
-        category=category,
-        engine_type=engine_type,
-        max_weight_kg=max_weight_kg,
-        num_engines=num_engines,
-        num_seats=num_seats,
-        base_of_operations=base_of_operations,
-        owner_name=owner_name,
-        type_certificate=designator,  # Alias for designator
-        status=status_val,
-    )
+    return TCLookupResponse(**mapped)
 
 
 @router.get(
@@ -410,14 +352,7 @@ async def lookup_aircraft(
     
     **Example:** `/api/tc/search?prefix=C-FG` returns all aircraft starting with C-FG.
     
-    **Input formats:**
-    - C-FG, CFG, FG (all equivalent)
-    - Case insensitive
-    
     **Returns:** Minimal fields only (registration, manufacturer, model).
-    NO calculated fields. NO example values.
-    
-    **Limit:** Maximum 50 results (default 20).
     """
 )
 async def search_aircraft(
@@ -437,9 +372,7 @@ async def search_aircraft(
 ):
     """
     Search aircraft by registration prefix.
-    
-    Read-only endpoint. No authentication required.
-    Returns MINIMAL fields only.
+    Uses centralized FR→EN mapping.
     """
     # Normalize prefix for search
     prefix_norm = prefix.strip().upper().replace("-", "")
@@ -448,27 +381,27 @@ async def search_aircraft(
     if not prefix_norm.startswith("C"):
         prefix_norm = "C" + prefix_norm
     
-    # Search using registration_norm with regex prefix match
+    # Search using both French and English field names
     pattern = f"^{re.escape(prefix_norm)}"
     
-    # Fetch ONLY minimal fields - NO extra data
-    cursor = db.tc_aircraft.find(
-        {"registration_norm": {"$regex": pattern}},
-        {
-            "_id": 0,
-            "registration": 1,
-            "manufacturer": 1,
-            "model": 1,
-        }
-    ).sort("registration_norm", 1).limit(limit)
+    cursor = db.tc_aircraft.find({
+        "$or": [
+            {"norme d'enregistrement": {"$regex": pattern}},
+            {"registration_norm": {"$regex": pattern}}
+        ]
+    }).limit(limit)
     
     results = []
     async for doc in cursor:
+        mapped = map_tc_aircraft(doc)
         results.append(TCSearchResult(
-            registration=doc.get("registration"),
-            manufacturer=doc.get("manufacturer"),
-            model=doc.get("model"),
+            registration=mapped.get("registration"),
+            manufacturer=mapped.get("manufacturer"),
+            model=mapped.get("model"),
         ))
+    
+    # Sort by registration
+    results.sort(key=lambda x: x.registration or "")
     
     # AUDIT LOG
     logger.info(f"[TC SEARCH] prefix={prefix_norm} | results={len(results)}")
@@ -490,40 +423,43 @@ async def get_tc_stats(
     # Total count
     total = await db.tc_aircraft.count_documents({})
     
-    # Get import date
-    sample = await db.tc_aircraft.find_one({}, {"tc_import_date": 1})
+    # Get sample to check field format
+    sample = await db.tc_aircraft.find_one({})
+    
+    # Detect if data is in French or English
+    data_format = "unknown"
+    if sample:
+        if "fabricant" in sample:
+            data_format = "french"
+        elif "manufacturer" in sample:
+            data_format = "english"
+    
+    # Get import date (try both field names)
     import_date = None
-    if sample and sample.get("tc_import_date"):
-        import_date = sample["tc_import_date"].strftime("%Y-%m-%d %H:%M")
+    if sample:
+        date_val = sample.get("tc_import_date") or sample.get("date_importation")
+        if date_val and hasattr(date_val, 'strftime'):
+            import_date = date_val.strftime("%Y-%m-%d %H:%M")
     
     # Log audit
-    logger.info(f"[TC STATS] total_aircraft={total}")
+    logger.info(f"[TC STATS] total={total} | data_format={data_format}")
     
-    # Top manufacturers
+    # Top manufacturers (handle both FR and EN)
+    manufacturer_field = "fabricant" if data_format == "french" else "manufacturer"
     pipeline = [
-        {"$group": {"_id": "$manufacturer", "count": {"$sum": 1}}},
+        {"$group": {"_id": f"${manufacturer_field}", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
         {"$limit": 10}
     ]
     top_manufacturers = []
     async for doc in db.tc_aircraft.aggregate(pipeline):
-        if doc["_id"]:  # Skip null manufacturers
+        if doc["_id"]:
             top_manufacturers.append({"manufacturer": doc["_id"], "count": doc["count"]})
-    
-    # Aircraft categories
-    cat_pipeline = [
-        {"$group": {"_id": "$aircraft_category", "count": {"$sum": 1}}},
-        {"$sort": {"count": -1}}
-    ]
-    categories = []
-    async for doc in db.tc_aircraft.aggregate(cat_pipeline):
-        if doc["_id"]:  # Skip null categories
-            categories.append({"category": doc["_id"], "count": doc["count"]})
     
     return {
         "total_aircraft": total,
         "import_date": import_date,
+        "data_format": data_format,
         "top_manufacturers": top_manufacturers,
-        "aircraft_categories": categories,
         "note": "Source: Transport Canada Civil Aircraft Register"
     }
