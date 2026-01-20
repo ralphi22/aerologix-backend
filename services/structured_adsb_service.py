@@ -49,7 +49,10 @@ class TCItemResult(BaseModel):
     recurrence_info: RecurrenceInfo
     detected_count: int
     evidence_source: str  # "OCR documents" or "None found"
+    evidence_note: str  # Factual note about evidence
     ocr_dates: List[str] = []  # Dates when detected in OCR
+    model: Optional[str] = None  # TC model field for reference
+    designator: Optional[str] = None  # TC designator for reference
 
 
 class AircraftIdentity(BaseModel):
