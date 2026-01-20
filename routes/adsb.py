@@ -185,6 +185,210 @@ class ADSBLookupResponse(BaseModel):
 
 
 # ============================================================
+# CANONICAL ENDPOINT: AD/SB BASELINE
+# ============================================================
+# Returns TC baseline AD/SB with OCR cross-reference (count_seen, last_seen_date)
+# MongoDB is the single source of truth for TC AD/SB baseline data
+
+class BaselineItem(BaseModel):
+    """Single AD/SB baseline item with OCR history"""
+    identifier: str
+    type: str  # "AD" or "SB"
+    title: Optional[str] = None
+    effective_date: Optional[str] = None
+    recurrence_raw: Optional[str] = None  # Raw recurrence type (ONCE, HOURS, etc.)
+    recurrence_value: Optional[int] = None
+    count_seen: int = 0  # Number of OCR Apply occurrences
+    last_seen_date: Optional[str] = None  # Most recent OCR detection
+    status: str = "NOT_FOUND"  # FOUND or NOT_FOUND (neutral, no compliance)
+
+
+class BaselineResponse(BaseModel):
+    """TC AD/SB Baseline Response"""
+    aircraft_id: str
+    registration: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    ad_list: List[BaselineItem] = []
+    sb_list: List[BaselineItem] = []
+    total_ad: int = 0
+    total_sb: int = 0
+    ocr_documents_analyzed: int = 0
+    source: str = "MongoDB tc_ad/tc_sb"
+    informational_only: bool = True
+    disclaimer: str = (
+        "This is an INFORMATIONAL baseline only. "
+        "It does NOT indicate compliance status. "
+        "Verify with Transport Canada and a licensed AME."
+    )
+
+
+@router.get(
+    "/baseline/{aircraft_id}",
+    response_model=BaselineResponse,
+    summary="TC AD/SB Baseline with OCR History [CANONICAL]",
+    description="""
+    **✅ CANONICAL ENDPOINT - TC AD/SB BASELINE**
+    
+    Returns the full TC baseline AD/SB list for an aircraft
+    with OCR history cross-reference.
+    
+    **Data Source:** MongoDB collections (tc_ad, tc_sb)
+    
+    **For each AD/SB item:**
+    - `count_seen`: Number of OCR Apply occurrences
+    - `last_seen_date`: Most recent OCR detection (if any)
+    - `recurrence_raw`: Raw recurrence type from TC
+    - `status`: FOUND or NOT_FOUND (neutral, no compliance inference)
+    
+    **One line per AD/SB** (no duplicates)
+    
+    **INFORMATIONAL ONLY** - No compliance decisions.
+    """
+)
+async def get_adsb_baseline(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    CANONICAL ENDPOINT: TC AD/SB Baseline with OCR cross-reference.
+    
+    MongoDB is the single source of truth.
+    Returns count_seen and last_seen_date per item.
+    """
+    logger.info(f"[CANONICAL] AD/SB Baseline | aircraft_id={aircraft_id} | user={current_user.id}")
+    
+    # Get aircraft
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aircraft not found"
+        )
+    
+    manufacturer = aircraft.get("manufacturer", "")
+    model = aircraft.get("model", "")
+    registration = aircraft.get("registration")
+    designator = aircraft.get("designator")
+    
+    # Import helper functions from structured service
+    from services.structured_adsb_service import StructuredADSBComparisonService
+    service = StructuredADSBComparisonService(db)
+    
+    # Get OCR references (user-validated APPLIED documents)
+    ocr_references, doc_count = await service.get_ocr_adsb_references(aircraft_id, current_user.id)
+    
+    # Fetch TC AD baseline from MongoDB
+    ad_list = []
+    async for ad in db.tc_ad.find({"is_active": True}):
+        # Check if applies to this aircraft (by designator or manufacturer+model)
+        applies = False
+        if designator and ad.get("designator") == designator:
+            applies = True
+        elif service._model_matches(model, ad.get("model", "")) and \
+             manufacturer.upper() == (ad.get("manufacturer") or "").upper():
+            applies = True
+        
+        if applies:
+            identifier = ad.get("ref", "")
+            norm_id = service._normalize_identifier(identifier)
+            
+            # Count OCR occurrences
+            count_seen = 0
+            all_dates = []
+            for ocr_ref, dates in ocr_references.items():
+                if service._identifiers_match(norm_id, ocr_ref):
+                    count_seen += len(dates)
+                    all_dates.extend(dates)
+            
+            sorted_dates = sorted(set(all_dates), reverse=True)
+            last_seen = sorted_dates[0] if sorted_dates else None
+            
+            # Format effective date
+            eff_date = ad.get("effective_date")
+            eff_str = eff_date.strftime("%Y-%m-%d") if hasattr(eff_date, 'strftime') else str(eff_date)[:10] if eff_date else None
+            
+            ad_list.append(BaselineItem(
+                identifier=identifier,
+                type="AD",
+                title=ad.get("title"),
+                effective_date=eff_str,
+                recurrence_raw=ad.get("recurrence_type"),
+                recurrence_value=ad.get("recurrence_value"),
+                count_seen=count_seen,
+                last_seen_date=last_seen,
+                status="FOUND" if count_seen > 0 else "NOT_FOUND",
+            ))
+    
+    # Fetch TC SB baseline from MongoDB
+    sb_list = []
+    async for sb in db.tc_sb.find({"is_active": True}):
+        applies = False
+        if designator and sb.get("designator") == designator:
+            applies = True
+        elif service._model_matches(model, sb.get("model", "")) and \
+             manufacturer.upper() == (sb.get("manufacturer") or "").upper():
+            applies = True
+        
+        if applies:
+            identifier = sb.get("ref", "")
+            norm_id = service._normalize_identifier(identifier)
+            
+            count_seen = 0
+            all_dates = []
+            for ocr_ref, dates in ocr_references.items():
+                if service._identifiers_match(norm_id, ocr_ref):
+                    count_seen += len(dates)
+                    all_dates.extend(dates)
+            
+            sorted_dates = sorted(set(all_dates), reverse=True)
+            last_seen = sorted_dates[0] if sorted_dates else None
+            
+            eff_date = sb.get("effective_date")
+            eff_str = eff_date.strftime("%Y-%m-%d") if hasattr(eff_date, 'strftime') else str(eff_date)[:10] if eff_date else None
+            
+            sb_list.append(BaselineItem(
+                identifier=identifier,
+                type="SB",
+                title=sb.get("title"),
+                effective_date=eff_str,
+                recurrence_raw=sb.get("recurrence_type"),
+                recurrence_value=sb.get("recurrence_value"),
+                count_seen=count_seen,
+                last_seen_date=last_seen,
+                status="FOUND" if count_seen > 0 else "NOT_FOUND",
+            ))
+    
+    # Sort by identifier
+    ad_list.sort(key=lambda x: x.identifier)
+    sb_list.sort(key=lambda x: x.identifier)
+    
+    logger.info(
+        f"[AD/SB BASELINE] {manufacturer} {model} | "
+        f"AD={len(ad_list)}, SB={len(sb_list)} | OCR docs={doc_count}"
+    )
+    
+    return BaselineResponse(
+        aircraft_id=aircraft_id,
+        registration=registration,
+        manufacturer=manufacturer,
+        model=model,
+        ad_list=ad_list,
+        sb_list=sb_list,
+        total_ad=len(ad_list),
+        total_sb=len(sb_list),
+        ocr_documents_analyzed=doc_count,
+        source="MongoDB tc_ad/tc_sb",
+        informational_only=True,
+    )
+
+
+# ============================================================
 # CANONICAL ENDPOINT: AD/SB LOOKUP
 # ============================================================
 
