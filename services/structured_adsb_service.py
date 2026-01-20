@@ -496,6 +496,12 @@ class StructuredADSBComparisonService:
                 elif isinstance(eff_date, str):
                     eff_date_str = eff_date[:10]
             
+            # Build evidence_note (factual only, no compliance wording)
+            if detected_count > 0:
+                evidence_note = f"Referenced in {detected_count} document(s)"
+            else:
+                evidence_note = "No reference found in analyzed documents"
+            
             results.append(TCItemResult(
                 identifier=identifier,
                 type=item.get("type", "AD"),
@@ -504,7 +510,10 @@ class StructuredADSBComparisonService:
                 recurrence_info=self._build_recurrence_info(item),
                 detected_count=detected_count,
                 evidence_source="OCR documents" if detected_count > 0 else "None found",
-                ocr_dates=sorted(set(detected_dates))
+                evidence_note=evidence_note,
+                ocr_dates=sorted(set(detected_dates)),
+                model=item.get("model"),
+                designator=item.get("designator"),
             ))
         
         return results
