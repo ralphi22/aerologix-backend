@@ -189,72 +189,142 @@ class StructuredADSBComparisonService:
         )
     
     # --------------------------------------------------------
-    # STEP 2: TC AD/SB APPLICABILITY LOOKUP (DESIGNATOR ONLY)
+    # MODEL MATCHING UTILITIES
+    # --------------------------------------------------------
+    
+    def _normalize_model(self, model: str) -> str:
+        """Normalize model for matching (uppercase, no spaces/hyphens)."""
+        if not model:
+            return ""
+        return model.upper().replace(" ", "").replace("-", "")
+    
+    def _model_matches(self, aircraft_model: str, ad_model: str) -> bool:
+        """
+        Check if aircraft model matches AD/SB model specification.
+        
+        Supports:
+        - Exact match: "172M" == "172M"
+        - Family match: "172M" starts with "172"
+        - Multi-model: "150, 152" matches both
+        """
+        if not aircraft_model or not ad_model:
+            return False
+        
+        ac = self._normalize_model(aircraft_model)
+        
+        for token in ad_model.split(","):
+            token_norm = self._normalize_model(token.strip())
+            if not token_norm:
+                continue
+            
+            # Exact or family match
+            if ac == token_norm or ac.startswith(token_norm) or token_norm.startswith(ac):
+                return True
+        
+        return False
+    
+    # --------------------------------------------------------
+    # STEP 2: TC AD/SB APPLICABILITY LOOKUP (DESIGNATOR + MODEL)
     # --------------------------------------------------------
     
     async def get_applicable_tc_adsb(
         self, 
-        designator: str
+        identity: AircraftIdentity
     ) -> Tuple[List[Dict], List[Dict]]:
         """
-        Get applicable AD/SB from TC database based on aircraft designator.
+        Get applicable AD/SB from TC database based on aircraft identity.
         
-        CRITICAL: Uses ONLY designator for lookup.
-        NO manufacturer, NO model, NO registration fallbacks.
+        LOOKUP STRATEGY (in order of priority):
+        1. By designator (most specific)
+        2. By manufacturer + model matching (fallback if no designator results)
         
         Args:
-            designator: Type certificate designator (e.g., "3A19")
+            identity: AircraftIdentity from TC Registry
             
         Returns:
             Tuple of (applicable_ads, applicable_sbs)
         """
         applicable_ads = []
         applicable_sbs = []
+        lookup_method = "none"
         
-        # DEFENSIVE: Log the exact key being used
-        logger.info(f"TC AD/SB lookup using designator={designator}")
+        designator = identity.designator
+        manufacturer = identity.manufacturer
+        model = identity.model
         
-        # Query TC AD collection - DESIGNATOR ONLY
-        ad_query = {
-            "designator": designator,
-            "is_active": True
-        }
+        # Strategy 1: Lookup by designator (if valid)
+        if self._is_valid_designator(designator):
+            logger.info(f"TC AD/SB lookup using designator={designator}")
+            lookup_method = "designator"
+            
+            # Query TC AD by designator
+            async for ad in self.db.tc_ad.find({"designator": designator, "is_active": True}):
+                applicable_ads.append(self._format_tc_item(ad, "AD"))
+            
+            # Query TC SB by designator
+            async for sb in self.db.tc_sb.find({"designator": designator, "is_active": True}):
+                applicable_sbs.append(self._format_tc_item(sb, "SB"))
         
-        async for ad in self.db.tc_ad.find(ad_query):
-            applicable_ads.append({
-                "identifier": ad.get("ref"),
-                "type": "AD",
-                "title": ad.get("title"),
-                "effective_date": ad.get("effective_date"),
-                "recurrence_type": ad.get("recurrence_type", "ONCE"),
-                "recurrence_value": ad.get("recurrence_value"),
-                "source_url": ad.get("source_url"),
-            })
-        
-        # Query TC SB collection - DESIGNATOR ONLY
-        sb_query = {
-            "designator": designator,
-            "is_active": True
-        }
-        
-        async for sb in self.db.tc_sb.find(sb_query):
-            applicable_sbs.append({
-                "identifier": sb.get("ref"),
-                "type": "SB",
-                "title": sb.get("title"),
-                "effective_date": sb.get("effective_date"),
-                "recurrence_type": sb.get("recurrence_type", "ONCE"),
-                "recurrence_value": sb.get("recurrence_value"),
-                "is_mandatory": sb.get("is_mandatory", False),
-                "source_url": sb.get("source_url"),
-            })
+        # Strategy 2: If no designator results, try manufacturer + model matching
+        if not applicable_ads and not applicable_sbs and manufacturer:
+            logger.info(f"TC AD/SB lookup using manufacturer={manufacturer} + model={model}")
+            lookup_method = "manufacturer+model"
+            
+            manufacturer_upper = manufacturer.upper().strip()
+            
+            # Query TC AD by manufacturer, then filter by model
+            async for ad in self.db.tc_ad.find({
+                "manufacturer": {"$regex": f"^{manufacturer_upper}$", "$options": "i"},
+                "is_active": True
+            }):
+                if self._model_matches(model, ad.get("model", "")):
+                    applicable_ads.append(self._format_tc_item(ad, "AD"))
+            
+            # Query TC SB by manufacturer, then filter by model
+            async for sb in self.db.tc_sb.find({
+                "manufacturer": {"$regex": f"^{manufacturer_upper}$", "$options": "i"},
+                "is_active": True
+            }):
+                if self._model_matches(model, sb.get("model", "")):
+                    applicable_sbs.append(self._format_tc_item(sb, "SB"))
         
         logger.info(
-            f"TC AD/SB lookup completed | designator={designator} | "
+            f"TC AD/SB lookup completed | method={lookup_method} | "
             f"ADs={len(applicable_ads)} | SBs={len(applicable_sbs)}"
         )
         
         return applicable_ads, applicable_sbs
+    
+    def _format_tc_item(self, item: Dict, item_type: str) -> Dict:
+        """Format TC AD/SB item for response."""
+        recurrence_type = item.get("recurrence_type", "ONCE")
+        recurrence_value = item.get("recurrence_value")
+        
+        # Build recurrence_info
+        if recurrence_type == "ONCE":
+            recurrence_info_type = "one-time"
+            recurrence_details = None
+        elif recurrence_type in ["HOURS", "CYCLES", "MONTHS", "YEARS"]:
+            recurrence_info_type = "recurring"
+            unit = recurrence_type.lower()
+            recurrence_details = f"{recurrence_value} {unit}" if recurrence_value else "unspecified"
+        else:
+            recurrence_info_type = "unspecified"
+            recurrence_details = None
+        
+        return {
+            "identifier": item.get("ref"),
+            "type": item_type,
+            "title": item.get("title"),
+            "effective_date": item.get("effective_date"),
+            "recurrence_type": recurrence_type,
+            "recurrence_value": recurrence_value,
+            "recurrence_info_type": recurrence_info_type,
+            "recurrence_details": recurrence_details,
+            "source_url": item.get("source_url"),
+            "model": item.get("model"),
+            "designator": item.get("designator"),
+        }
     
     # --------------------------------------------------------
     # STEP 3: OCR-APPLIED MAINTENANCE REFERENCES
