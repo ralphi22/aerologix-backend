@@ -504,16 +504,25 @@ class StructuredADSBComparisonService:
             else:
                 evidence_note = "No reference found in analyzed documents"
             
+            # Compute last_seen_date (most recent OCR detection)
+            sorted_dates = sorted(set(detected_dates), reverse=True)
+            last_seen_date = sorted_dates[0] if sorted_dates else None
+            
+            # Get raw recurrence type from TC
+            recurrence_raw = item.get("recurrence_type")
+            
             results.append(TCItemResult(
                 identifier=identifier,
                 type=item.get("type", "AD"),
                 title=item.get("title"),
                 effective_date=eff_date_str,
                 recurrence_info=self._build_recurrence_info(item),
+                recurrence_raw=recurrence_raw,
                 detected_count=detected_count,
+                last_seen_date=last_seen_date,
                 evidence_source="OCR documents" if detected_count > 0 else "None found",
                 evidence_note=evidence_note,
-                ocr_dates=sorted(set(detected_dates)),
+                ocr_dates=sorted_dates,
                 model=item.get("model"),
                 designator=item.get("designator"),
             ))
