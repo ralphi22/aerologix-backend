@@ -11,6 +11,11 @@ CANONICAL TC REGISTRY ENDPOINTS:
 
 DATA SOURCE: MongoDB tc_aircraft collection (~34,000 aircraft)
 
+FIELD MAPPING:
+- DB fields are in FRENCH (faithful to TC source)
+- API exposes ENGLISH canonical schema
+- Mapping is centralized in map_tc_aircraft()
+
 STRICT RULES:
 - If a field is absent in DB → return null
 - NO invented/calculated/deduced values
@@ -21,7 +26,7 @@ STRICT RULES:
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Any
 import re
 import logging
 
@@ -32,48 +37,129 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# RESPONSE MODELS - NORMALIZED SCHEMA
+# FR → EN FIELD MAPPING (CENTRALIZED)
 # ============================================================
-# These models define the EXACT fields returned by the API
-# All fields are Optional - if absent in DB, return null
+# This is the SINGLE SOURCE OF TRUTH for field name translation
+# DB fields (French) → API fields (English)
+#
+# ⚠️ RULES:
+# - NO default values
+# - NO business logic
+# - NO transformations
+# - None if absent
+
+def map_tc_aircraft(doc: dict) -> dict:
+    """
+    Map TC aircraft document from French DB fields to English API fields.
+    
+    This function handles BOTH:
+    - French field names (from real TC import)
+    - English field names (legacy/test data)
+    
+    Returns dict with English canonical field names.
+    None for any missing field - NO invented values.
+    """
+    if not doc:
+        return {}
+    
+    def get_field(fr_key: str, en_key: str = None) -> Any:
+        """Get field value, trying French key first, then English fallback."""
+        value = doc.get(fr_key)
+        if value is None and en_key:
+            value = doc.get(en_key)
+        return value
+    
+    return {
+        # Primary identifiers
+        "registration": get_field("inscription", "registration"),
+        "registration_norm": get_field("norme d'enregistrement", "registration_norm"),
+        
+        # Aircraft identification
+        "manufacturer": get_field("fabricant", "manufacturer"),
+        "model": get_field("modèle", "model"),
+        "designator": get_field("désignateur", "designator"),
+        "serial_number": get_field("numéro_de_série", "serial_number"),
+        
+        # Technical specifications
+        "year": get_field("date_fabrication", "year"),
+        "category": get_field("catégorie_aéronef", "aircraft_category"),
+        "engine_type": get_field("catégorie_moteur", "engine_category"),
+        "engine_manufacturer": get_field("fabricant_de_moteurs", "engine_manufacturer"),
+        "max_weight_kg": get_field("poids_kg", "weight_kg"),
+        "number_of_engines": get_field("nombre_moteurs", "num_engines"),
+        "number_of_seats": get_field("nombre_de_sièges", "num_seats"),
+        
+        # Location/Operations
+        "base_province": get_field("province_de_base", "base_province"),
+        "base_city": get_field("aéroport de la ville", "city_airport"),
+        
+        # Owner info (public record only)
+        "owner_name": get_field("nom_du_propriétaire", "owner_name"),
+        "owner_city": get_field("ville du propriétaire", "owner_city"),
+        "owner_province": get_field("propriétaire_province", "owner_province"),
+        
+        # Purpose and status
+        "purpose": get_field("but", "purpose"),
+        "status": get_field("statut", "status"),
+        "country_of_manufacture": get_field("pays_fabrication", "country_manufacture"),
+        
+        # Dates
+        "issued_date": get_field("date d'émission", "date_manufacture"),
+        "last_modified": get_field("date_modifiée", "updated_at"),
+    }
+
+
+# ============================================================
+# RESPONSE MODELS - CANONICAL ENGLISH SCHEMA
+# ============================================================
 
 class TCLookupResponse(BaseModel):
     """
-    TC Aircraft lookup response - NORMALIZED SCHEMA.
+    TC Aircraft lookup response - CANONICAL ENGLISH SCHEMA.
     
-    Contains only fields that exist in the tc_aircraft collection.
+    All fields mapped from French DB fields.
     If a field is absent in DB → null is returned.
     NO invented values.
     """
     # Primary identifiers
-    registration: str
+    registration: Optional[str] = None
     registration_norm: Optional[str] = None
     
     # Aircraft identification
     manufacturer: Optional[str] = None
     model: Optional[str] = None
-    designator: Optional[str] = None  # Type certificate (e.g., "3A19")
+    designator: Optional[str] = None
     serial_number: Optional[str] = None
     
     # Technical specifications
-    year: Optional[int] = None
-    category: Optional[str] = None  # Aircraft category (e.g., "Normal")
-    engine_type: Optional[str] = None  # Engine type (e.g., "Piston")
+    year: Optional[str] = None
+    category: Optional[str] = None
+    engine_type: Optional[str] = None
+    engine_manufacturer: Optional[str] = None
     max_weight_kg: Optional[float] = None
-    num_engines: Optional[int] = None
-    num_seats: Optional[int] = None
+    number_of_engines: Optional[int] = None
+    number_of_seats: Optional[int] = None
     
     # Location/Operations
-    base_of_operations: Optional[str] = None  # e.g., "CSG3 - Joliette, Québec, CANADA"
+    base_province: Optional[str] = None
+    base_city: Optional[str] = None
     
-    # Owner info (public record only)
+    # Owner info
     owner_name: Optional[str] = None
+    owner_city: Optional[str] = None
+    owner_province: Optional[str] = None
     
-    # Type certificate reference
-    type_certificate: Optional[str] = None  # Alias for designator
-    
-    # Status
+    # Purpose and status
+    purpose: Optional[str] = None
     status: Optional[str] = None
+    country_of_manufacture: Optional[str] = None
+    
+    # Dates
+    issued_date: Optional[str] = None
+    last_modified: Optional[str] = None
+    
+    # Alias for compatibility
+    type_certificate: Optional[str] = None
 
 
 class TCSearchResult(BaseModel):
@@ -83,7 +169,7 @@ class TCSearchResult(BaseModel):
     Contains only essential fields for search results.
     NO calculated fields. NO example values.
     """
-    registration: str
+    registration: Optional[str] = None
     manufacturer: Optional[str] = None
     model: Optional[str] = None
 
@@ -93,34 +179,6 @@ class TCLookupError(BaseModel):
     error: str
     registration: str
     suggestion: Optional[str] = None
-
-
-# ============================================================
-# FIELD MAPPING - DB TO API
-# ============================================================
-# Maps database field names to API response field names
-# This ensures stable API contracts even if DB schema changes
-
-DB_TO_API_FIELD_MAP = {
-    # Direct mappings
-    "registration": "registration",
-    "registration_norm": "registration_norm",
-    "manufacturer": "manufacturer",
-    "model": "model",
-    "designator": "designator",
-    "serial_number": "serial_number",
-    "owner_name": "owner_name",
-    "status": "status",
-    "num_engines": "num_engines",
-    "num_seats": "num_seats",
-    
-    # Mapped names (DB name → API name)
-    "aircraft_category": "category",
-    "engine_category": "engine_type",
-    "weight_kg": "max_weight_kg",
-    "date_manufacture": "year",  # Will be converted to year integer
-    "city_airport": "base_of_operations",
-}
 
 
 # ============================================================
