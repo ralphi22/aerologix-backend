@@ -47,10 +47,12 @@ class TCItemResult(BaseModel):
     title: Optional[str] = None
     effective_date: Optional[str] = None
     recurrence_info: RecurrenceInfo
-    detected_count: int
+    recurrence_raw: Optional[str] = None  # Raw recurrence type from TC (e.g., "HOURS", "ONCE")
+    detected_count: int  # Number of OCR Apply occurrences (count_seen)
+    last_seen_date: Optional[str] = None  # Most recent OCR detection date
     evidence_source: str  # "OCR documents" or "None found"
     evidence_note: str  # Factual note about evidence
-    ocr_dates: List[str] = []  # Dates when detected in OCR
+    ocr_dates: List[str] = []  # All dates when detected in OCR
     model: Optional[str] = None  # TC model field for reference
     designator: Optional[str] = None  # TC designator for reference
 
