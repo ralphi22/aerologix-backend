@@ -1,11 +1,24 @@
 """
 AD/SB (Airworthiness Directives / Service Bulletins) Routes for AeroLogix AI
+
+CANONICAL ENDPOINTS:
+- GET /api/adsb/lookup/{aircraft_id} - TC AD/SB lookup by manufacturer+model
+- GET /api/adsb/structured/{aircraft_id} - Structured comparison with OCR evidence
+- POST /api/adsb/mark-reviewed/{aircraft_id} - Mark AD/SB as reviewed
+
+AD/SB LOOKUP RULES:
+- Lookup based on: manufacturer, model (normalized), model family
+- Registration is NOT used for AD/SB lookup (only for aircraft identification)
+- Model matching: "172" matches "172M", "150, 152" matches both
+- Designator is optional (never blocking)
+- TC-SAFE: Informational only, no compliance decisions
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from bson import ObjectId
+from pydantic import BaseModel, Field
 from database.mongodb import get_database
 from services.auth_deps import get_current_user
 from models.adsb import (
@@ -14,10 +27,317 @@ from models.adsb import (
 )
 from models.user import User
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/adsb", tags=["adsb"])
+
+
+# ============================================================
+# MODEL NORMALIZATION & MATCHING FUNCTIONS
+# ============================================================
+
+def normalize_model(model: str) -> str:
+    """
+    Normalize aircraft model for matching.
+    
+    Removes spaces, hyphens, converts to uppercase.
+    Example: "172M" → "172M", "PA-28" → "PA28"
+    """
+    if not model:
+        return ""
+    return model.upper().replace(" ", "").replace("-", "")
+
+
+def model_matches(aircraft_model: str, ad_model: str) -> bool:
+    """
+    Check if aircraft model matches AD/SB model specification.
+    
+    Supports:
+    - Exact match: "172M" == "172M"
+    - Family match: "172M" starts with "172"
+    - Multi-model: "150, 152" matches both "150" and "152"
+    
+    Args:
+        aircraft_model: Aircraft's model (e.g., "172M")
+        ad_model: AD/SB model field (e.g., "172" or "150, 152")
+        
+    Returns:
+        True if aircraft model matches any of the AD/SB model specifications
+    """
+    if not aircraft_model or not ad_model:
+        return False
+    
+    ac = normalize_model(aircraft_model)
+    
+    # Split AD model by comma (handles "150, 152, 172")
+    for token in ad_model.split(","):
+        token_norm = normalize_model(token.strip())
+        
+        if not token_norm:
+            continue
+        
+        # Exact match
+        if ac == token_norm:
+            return True
+        
+        # Family match (172M starts with 172)
+        if ac.startswith(token_norm):
+            return True
+        
+        # Reverse family match (172 in AD matches 172M aircraft)
+        if token_norm.startswith(ac):
+            return True
+    
+    return False
+
+
+def adsb_applies(aircraft: dict, item: dict) -> bool:
+    """
+    Check if an AD/SB item applies to an aircraft.
+    
+    Matching rules:
+    1. Manufacturer MUST match (case-insensitive)
+    2. Model MUST match (using model_matches function)
+    3. Designator is OPTIONAL (never blocking)
+    
+    Args:
+        aircraft: Aircraft dict with manufacturer, model
+        item: TC AD/SB item with manufacturer, model, designator
+        
+    Returns:
+        True if the AD/SB applies to this aircraft
+    """
+    # Manufacturer must match (case-insensitive)
+    ac_mfr = (aircraft.get("manufacturer") or "").upper().strip()
+    item_mfr = (item.get("manufacturer") or "").upper().strip()
+    
+    if not ac_mfr or not item_mfr:
+        return False
+    
+    if ac_mfr != item_mfr:
+        return False
+    
+    # Model must match using flexible matching
+    if not model_matches(
+        aircraft.get("model", ""),
+        item.get("model", "")
+    ):
+        return False
+    
+    # Designator is OPTIONAL - if present in both, prefer match
+    # But NEVER block on designator mismatch
+    # This ensures we don't miss applicable AD/SB
+    
+    return True
+
+
+# ============================================================
+# RESPONSE MODELS FOR LOOKUP
+# ============================================================
+
+class ADSBLookupItem(BaseModel):
+    """Single AD/SB item in lookup response"""
+    ref: str
+    type: str  # "AD" or "SB"
+    title: Optional[str] = None
+    effective_date: Optional[str] = None
+    recurrence_type: Optional[str] = None
+    recurrence_value: Optional[int] = None
+    source_url: Optional[str] = None
+    designator: Optional[str] = None
+    model: Optional[str] = None
+
+
+class ADSBLookupAircraft(BaseModel):
+    """Aircraft info in lookup response"""
+    id: str
+    registration: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    designator: Optional[str] = None
+
+
+class ADSBLookupCount(BaseModel):
+    """Count of AD vs SB"""
+    ad: int = 0
+    sb: int = 0
+    total: int = 0
+
+
+class ADSBLookupResponse(BaseModel):
+    """
+    TC AD/SB Lookup Response.
+    
+    INFORMATIONAL ONLY - NOT a compliance assessment.
+    """
+    aircraft: ADSBLookupAircraft
+    adsb: List[ADSBLookupItem] = []
+    count: ADSBLookupCount
+    lookup_method: str = "manufacturer+model"
+    informational_only: bool = True
+    disclaimer: str = (
+        "This lookup is for INFORMATIONAL PURPOSES ONLY. "
+        "It does NOT constitute a compliance assessment. "
+        "Verify with Transport Canada and a licensed AME."
+    )
+
+
+# ============================================================
+# CANONICAL ENDPOINT: AD/SB LOOKUP
+# ============================================================
+
+@router.get(
+    "/lookup/{aircraft_id}",
+    response_model=ADSBLookupResponse,
+    summary="TC AD/SB Lookup by Manufacturer + Model [CANONICAL]",
+    description="""
+    **✅ CANONICAL ENDPOINT - TC AD/SB LOOKUP**
+    
+    Retrieves all applicable Transport Canada AD/SB for an aircraft
+    based on **manufacturer** and **model** matching.
+    
+    **MATCHING RULES:**
+    - Manufacturer: Exact match (case-insensitive)
+    - Model: Flexible match (172 matches 172M, "150, 152" matches both)
+    - Designator: Optional (never blocking)
+    
+    **NOT USED FOR LOOKUP:**
+    - Registration (C-XXXX) - only used to identify the aircraft
+    
+    **INFORMATIONAL ONLY:**
+    - No compliance decisions
+    - No "compliant/non-compliant" status
+    - Verify with TC and licensed AME
+    """
+)
+async def lookup_adsb(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    CANONICAL ENDPOINT: TC AD/SB Lookup.
+    
+    Looks up applicable AD/SB based on manufacturer + model.
+    Registration is NOT used for AD/SB matching.
+    """
+    logger.info(f"[CANONICAL] AD/SB Lookup | aircraft_id={aircraft_id} | user={current_user.id}")
+    
+    # Get aircraft
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aircraft not found"
+        )
+    
+    manufacturer = aircraft.get("manufacturer")
+    model = aircraft.get("model")
+    
+    # Validate required fields
+    if not manufacturer:
+        logger.warning(f"[AD/SB LOOKUP] No manufacturer | aircraft_id={aircraft_id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Aircraft manufacturer is required for AD/SB lookup"
+        )
+    
+    if not model:
+        logger.warning(f"[AD/SB LOOKUP] No model | aircraft_id={aircraft_id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Aircraft model is required for AD/SB lookup"
+        )
+    
+    # Fetch TC AD/SB by manufacturer (broad query)
+    # Then filter by model matching in Python for flexibility
+    manufacturer_upper = manufacturer.upper().strip()
+    
+    tc_items = []
+    
+    # Query TC AD collection
+    ad_cursor = db.tc_ad.find({
+        "manufacturer": {"$regex": f"^{re.escape(manufacturer_upper)}$", "$options": "i"},
+        "is_active": True
+    })
+    async for ad in ad_cursor:
+        tc_items.append({
+            **ad,
+            "_type": "AD"
+        })
+    
+    # Query TC SB collection
+    sb_cursor = db.tc_sb.find({
+        "manufacturer": {"$regex": f"^{re.escape(manufacturer_upper)}$", "$options": "i"},
+        "is_active": True
+    })
+    async for sb in sb_cursor:
+        tc_items.append({
+            **sb,
+            "_type": "SB"
+        })
+    
+    logger.info(f"[AD/SB LOOKUP] Fetched {len(tc_items)} TC items for manufacturer={manufacturer}")
+    
+    # Filter by model matching
+    applicable = []
+    for item in tc_items:
+        if adsb_applies(aircraft, item):
+            # Format effective_date
+            eff_date = item.get("effective_date")
+            if eff_date and hasattr(eff_date, 'strftime'):
+                eff_date = eff_date.strftime("%Y-%m-%d")
+            elif eff_date:
+                eff_date = str(eff_date)
+            
+            applicable.append(ADSBLookupItem(
+                ref=item.get("ref", ""),
+                type=item.get("_type", "AD"),
+                title=item.get("title"),
+                effective_date=eff_date,
+                recurrence_type=item.get("recurrence_type"),
+                recurrence_value=item.get("recurrence_value"),
+                source_url=item.get("source_url"),
+                designator=item.get("designator"),
+                model=item.get("model"),
+            ))
+    
+    # Sort by type (AD first) then by ref
+    applicable.sort(key=lambda x: (0 if x.type == "AD" else 1, x.ref))
+    
+    # Count AD vs SB
+    ad_count = sum(1 for x in applicable if x.type == "AD")
+    sb_count = sum(1 for x in applicable if x.type == "SB")
+    
+    # AUDIT LOG
+    logger.info(
+        f"[AD/SB LOOKUP] {manufacturer} {model} | "
+        f"matched={len(applicable)} (AD={ad_count}, SB={sb_count})"
+    )
+    
+    return ADSBLookupResponse(
+        aircraft=ADSBLookupAircraft(
+            id=aircraft_id,
+            registration=aircraft.get("registration"),
+            manufacturer=manufacturer,
+            model=model,
+            designator=aircraft.get("designator"),
+        ),
+        adsb=applicable,
+        count=ADSBLookupCount(
+            ad=ad_count,
+            sb=sb_count,
+            total=len(applicable),
+        ),
+        lookup_method="manufacturer+model",
+        informational_only=True,
+    )
 
 
 @router.post("", response_model=dict)
