@@ -70,6 +70,7 @@ app.include_router(tc.router)
 app.include_router(limitations.router)
 app.include_router(revenuecat.router)
 app.include_router(tc_adsb_detection.router)
+app.include_router(legal.router)  # Public legal pages (no /api prefix)
 
 @app.get("/")
 async def root():
