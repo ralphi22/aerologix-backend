@@ -377,9 +377,13 @@ class TCPDFImportService:
                     logger.debug(f"Skipped {ref_data.type} {ref_data.ref} (source={existing_source})")
             else:
                 # Insert new
+                # Generate real MongoDB ObjectId
+                from bson import ObjectId
+                doc_id = ObjectId()
+                
                 doc = {
-                    "_id": ref_data.ref,  # Use ref as _id for uniqueness
-                    "ref": ref_data.ref,
+                    "_id": doc_id,  # Real MongoDB ObjectId
+                    "ref": ref_data.ref,  # Business identifier (CF-xxx)
                     "type": ref_data.type,
                     "title": ref_data.title,
                     "scope": ref_data.scope.value,
@@ -407,7 +411,7 @@ class TCPDFImportService:
                 try:
                     await collection.insert_one(doc)
                     inserted += 1
-                    logger.info(f"Inserted {ref_data.type} {ref_data.ref} tc_pdf_id={tc_pdf_id}")
+                    logger.info(f"Inserted {ref_data.type} {ref_data.ref} _id={doc_id} tc_pdf_id={tc_pdf_id}")
                 except Exception as e:
                     # Duplicate key - race condition, skip
                     logger.warning(f"Insert failed for {ref_data.ref}: {e}")
