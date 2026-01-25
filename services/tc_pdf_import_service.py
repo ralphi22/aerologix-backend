@@ -512,21 +512,22 @@ class TCPDFImportService:
                     errors=["No AD/SB references found in PDF"],
                 )
             
-            # Step 3: Store PDF file
-            pdf_storage_path = await self.store_pdf_file(
+            # Step 3: Store PDF file (returns path and tc_pdf_id)
+            pdf_storage_path, tc_pdf_id = await self.store_pdf_file(
                 pdf_bytes=pdf_bytes,
                 filename=filename,
                 aircraft_id=aircraft_id,
                 user_id=user_id
             )
             
-            # Step 4: Upsert to MongoDB
+            # Step 4: Upsert to MongoDB with tc_pdf_id
             inserted, updated, skipped = await self.upsert_references(
                 references=references,
                 aircraft_id=aircraft_id,
                 user_id=user_id,
                 filename=filename,
-                pdf_storage_path=pdf_storage_path
+                pdf_storage_path=pdf_storage_path,
+                tc_pdf_id=tc_pdf_id
             )
             
             # Step 5: Audit log
