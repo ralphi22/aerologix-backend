@@ -120,9 +120,14 @@ async def check_baseline(db):
 
 async def delete_reference(db, tc_reference_id):
     """Test deletion by tc_reference_id."""
+    from bson import ObjectId
+    
+    # Convert string to ObjectId for MongoDB query
+    obj_id = ObjectId(tc_reference_id)
+    
     # Find and delete
     result = await db.tc_ad.delete_one({
-        "_id": tc_reference_id,
+        "_id": obj_id,
         "source": "TC_PDF_IMPORT"
     })
     
