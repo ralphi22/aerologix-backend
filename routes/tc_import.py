@@ -454,7 +454,7 @@ async def _view_tc_pdf_impl(
         else:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"PDF_NOT_FOUND: File not found on disk."
+                detail="PDF_NOT_FOUND: File not found on disk."
             )
     
     # Get file size
