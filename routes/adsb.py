@@ -403,6 +403,8 @@ async def get_adsb_baseline(
     
     user_imported_ad_count = 0
     user_imported_sb_count = 0
+    ghost_ad_filtered = 0
+    ghost_sb_filtered = 0
     
     # Query AD imported for this specific aircraft via PDF
     async for ad in db.tc_ad.find({
@@ -414,6 +416,13 @@ async def get_adsb_baseline(
         
         # Skip if already in canonical baseline (union by ref)
         if identifier in existing_ad_refs:
+            continue
+        
+        # FILTER GHOST ADs: Must have valid import metadata
+        import_filename = ad.get("import_filename") or ad.get("last_import_filename")
+        if not import_filename:
+            ghost_ad_filtered += 1
+            logger.debug(f"[AD/SB BASELINE] Filtered ghost AD: {identifier} (no import_filename)")
             continue
         
         norm_id = service._normalize_identifier(identifier)
@@ -443,6 +452,8 @@ async def get_adsb_baseline(
             last_seen_date=last_seen,
             status="FOUND" if count_seen > 0 else "NOT_FOUND",
             origin="USER_IMPORTED_REFERENCE",
+            pdf_available=True,
+            pdf_filename=import_filename,
         ))
         user_imported_ad_count += 1
     
@@ -456,6 +467,13 @@ async def get_adsb_baseline(
         
         # Skip if already in canonical baseline
         if identifier in existing_sb_refs:
+            continue
+        
+        # FILTER GHOST SBs: Must have valid import metadata
+        import_filename = sb.get("import_filename") or sb.get("last_import_filename")
+        if not import_filename:
+            ghost_sb_filtered += 1
+            logger.debug(f"[AD/SB BASELINE] Filtered ghost SB: {identifier} (no import_filename)")
             continue
         
         norm_id = service._normalize_identifier(identifier)
