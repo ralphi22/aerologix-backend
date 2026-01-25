@@ -677,13 +677,23 @@ async def delete_tc_reference_by_id(
     TC-SAFE: Only affects USER_IMPORTED_REFERENCE, never TC_BASELINE.
     """
     from datetime import timezone
+    from bson import ObjectId
     import os
     
     logger.info(f"[TC PDF DELETE] tc_reference_id={tc_reference_id} user={current_user.id}")
     
+    # Convert string ID to ObjectId for MongoDB query
+    try:
+        obj_id = ObjectId(tc_reference_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid tc_reference_id format. Expected 24-character hex string."
+        )
+    
     # Find the reference by _id (try AD first, then SB)
     reference = await db.tc_ad.find_one({
-        "_id": tc_reference_id,
+        "_id": obj_id,
         "source": "TC_PDF_IMPORT"
     })
     
@@ -692,7 +702,7 @@ async def delete_tc_reference_by_id(
     
     if not reference:
         reference = await db.tc_sb.find_one({
-            "_id": tc_reference_id,
+            "_id": obj_id,
             "source": "TC_PDF_IMPORT"
         })
         ref_type = "SB"
@@ -721,8 +731,8 @@ async def delete_tc_reference_by_id(
     identifier = reference.get("ref", "")
     pdf_storage_path = reference.get("pdf_storage_path")
     
-    # Delete from MongoDB
-    result = await collection.delete_one({"_id": tc_reference_id})
+    # Delete from MongoDB using ObjectId
+    result = await collection.delete_one({"_id": obj_id})
     
     # Delete PDF file if exists
     pdf_deleted = False
