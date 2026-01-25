@@ -530,8 +530,6 @@ async def get_adsb_baseline(
         f"AD={len(ad_list)}, SB={len(sb_list)} | OCR docs={doc_count}"
     )
     
-    # DEBUG: Log exact response content before serialization
-    logger.info(f"[DEBUG BASELINE RESPONSE] total_items={len(ad_list) + len(sb_list)}")
     return BaselineResponse(
         aircraft_id=aircraft_id,
         registration=registration,
