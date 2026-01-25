@@ -532,11 +532,6 @@ async def get_adsb_baseline(
     
     # DEBUG: Log exact response content before serialization
     logger.info(f"[DEBUG BASELINE RESPONSE] total_items={len(ad_list) + len(sb_list)}")
-    for ad in ad_list:
-        logger.info(f"  - {ad.identifier} | origin={ad.origin} | type={ad.type}")
-    for sb in sb_list:
-        logger.info(f"  - {sb.identifier} | origin={sb.origin} | type={sb.type}")
-    
     return BaselineResponse(
         aircraft_id=aircraft_id,
         registration=registration,
