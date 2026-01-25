@@ -377,30 +377,6 @@ async def view_tc_pdf(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"PDF_NOT_FOUND: File '{pdf_filename}' not available. Re-import the PDF to store it."
     )
-            detail="No PDF file associated with this reference"
-        )
-    
-    # Audit log
-    await db.tc_adsb_audit_log.insert_one({
-        "event_type": "TC_PDF_VIEWED",
-        "aircraft_id": aircraft_id,
-        "user_id": current_user.id,
-        "reference": identifier,
-        "reference_type": ref_type,
-        "filename": pdf_filename,
-        "created_at": datetime.now(timezone.utc)
-    })
-    
-    # NOTE: PDF storage not implemented yet
-    # This endpoint structure is ready for when PDF storage is added
-    return {
-        "status": "info",
-        "message": "PDF storage not yet implemented. Reference metadata available.",
-        "reference": identifier,
-        "type": ref_type,
-        "filename": pdf_filename,
-        "tc_search_url": "https://wwwapps.tc.gc.ca/Saf-Sec-Sur/2/cawis-swimn/AD_h.aspx?lang=eng"
-    }
 
 
 # ============================================================
