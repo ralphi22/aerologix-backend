@@ -483,16 +483,17 @@ async def delete_tc_reference(
         "aircraft_id": aircraft_id,
         "user_id": current_user.id,
         "reference": identifier,
-        "deleted_from_ad": result_ad.deleted_count > 0,
-        "deleted_from_sb": result_sb.deleted_count > 0,
+        "reference_type": ref_type,
+        "pdf_deleted": pdf_deleted,
         "created_at": datetime.now(timezone.utc)
     })
     
-    logger.info(f"TC Reference Deleted | ref={identifier} | AD={result_ad.deleted_count} | SB={result_sb.deleted_count}")
+    logger.info(f"[TC PDF DELETE] aircraft={aircraft_id} ref={identifier} - Deleted")
     
     return {
         "success": True,
         "message": f"Reference {identifier} deleted successfully",
         "reference": identifier,
-        "deleted_count": total_deleted
+        "type": ref_type,
+        "pdf_deleted": pdf_deleted
     }
