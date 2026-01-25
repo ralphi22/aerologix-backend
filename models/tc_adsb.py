@@ -153,6 +153,10 @@ class TCSBBase(BaseModel):
     # Status
     is_active: bool = Field(default=True)
     superseded_by: Optional[str] = Field(None)
+    
+    # Traceability (NEW for Phase 1)
+    source: ImportSource = Field(default=ImportSource.TC_SEED, description="Origin of this data")
+    scope: ADSBScope = Field(default=ADSBScope.UNSPECIFIED, description="Applicability scope")
 
 
 class TCSB(TCSBBase):
