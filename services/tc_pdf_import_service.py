@@ -323,6 +323,7 @@ class TCPDFImportService:
             user_id: User performing import
             filename: Original filename for audit
             pdf_storage_path: Path to stored PDF file
+            tc_pdf_id: Unique PDF identifier
             
         Returns:
             Tuple of (inserted, updated, skipped)
@@ -354,9 +355,11 @@ class TCPDFImportService:
                         "import_aircraft_id": aircraft_id,
                     }
                     
-                    # Add PDF storage path if available
+                    # Add PDF identifiers if available
                     if pdf_storage_path:
                         update_data["pdf_storage_path"] = pdf_storage_path
+                    if tc_pdf_id:
+                        update_data["tc_pdf_id"] = tc_pdf_id
                     
                     # Only update title if we found one and existing is empty
                     if ref_data.title and not existing.get("title"):
