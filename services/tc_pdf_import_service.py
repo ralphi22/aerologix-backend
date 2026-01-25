@@ -307,6 +307,7 @@ class TCPDFImportService:
                         "updated_at": now,
                         "last_import_filename": filename,
                         "last_import_user": user_id,
+                        "import_aircraft_id": aircraft_id,  # CRITICAL: Link to aircraft for baseline query
                     }
                     
                     # Only update title if we found one and existing is empty
