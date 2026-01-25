@@ -284,10 +284,11 @@ async def view_tc_pdf(
     
     TC-SAFE: Read-only consultation.
     """
-    from fastapi.responses import Response
+    from fastapi.responses import FileResponse, Response
     from datetime import timezone
+    import os
     
-    logger.info(f"TC PDF View | aircraft={aircraft_id} | ref={identifier} | user={current_user.id}")
+    logger.info(f"[TC PDF VIEW] aircraft={aircraft_id} ref={identifier}")
     
     # Validate aircraft ownership
     aircraft = await db.aircrafts.find_one({
@@ -323,11 +324,59 @@ async def view_tc_pdf(
             detail="Reference not found or not a user-imported reference"
         )
     
-    # Get filename
+    # Get filename and storage path
     pdf_filename = reference.get("import_filename") or reference.get("last_import_filename")
+    pdf_storage_path = reference.get("pdf_storage_path")
+    
     if not pdf_filename:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail="PDF_NOT_FOUND: No PDF file associated with this reference"
+        )
+    
+    # Check if file exists on disk
+    if pdf_storage_path:
+        full_path = f"/app/backend/{pdf_storage_path}"
+        if os.path.exists(full_path):
+            # Audit log
+            await db.tc_adsb_audit_log.insert_one({
+                "event_type": "TC_PDF_VIEWED",
+                "aircraft_id": aircraft_id,
+                "user_id": current_user.id,
+                "reference": identifier,
+                "reference_type": ref_type,
+                "filename": pdf_filename,
+                "created_at": datetime.now(timezone.utc)
+            })
+            
+            logger.info(f"[TC PDF VIEW] aircraft={aircraft_id} ref={identifier} - Streaming PDF")
+            
+            # Return PDF file with proper headers
+            return FileResponse(
+                path=full_path,
+                media_type="application/pdf",
+                filename=pdf_filename,
+                headers={
+                    "Content-Disposition": f'inline; filename="{pdf_filename}"'
+                }
+            )
+    
+    # PDF not stored yet - return metadata only
+    await db.tc_adsb_audit_log.insert_one({
+        "event_type": "TC_PDF_VIEWED",
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "reference": identifier,
+        "reference_type": ref_type,
+        "filename": pdf_filename,
+        "pdf_missing": True,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"PDF_NOT_FOUND: File '{pdf_filename}' not available. Re-import the PDF to store it."
+    )
             detail="No PDF file associated with this reference"
         )
     
