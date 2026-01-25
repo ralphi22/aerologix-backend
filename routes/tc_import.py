@@ -385,34 +385,17 @@ async def view_tc_pdf(
 
 
 # ============================================================
-# ENDPOINT 3b: VIEW PDF BY tc_pdf_id (CANONICAL)
+# ENDPOINT 3b: VIEW PDF BY tc_pdf_id (CANONICAL + ALIAS)
 # ============================================================
 
-@router.get(
-    "/pdf-by-id/{tc_pdf_id}",
-    summary="View imported TC PDF by tc_pdf_id",
-    description="""
-    Stream the PDF file using its unique tc_pdf_id (UUID).
-    
-    **Use this endpoint for PDF viewing.**
-    
-    **Headers returned:**
-    - Content-Type: application/pdf
-    - Content-Disposition: inline; filename="tc_{tc_pdf_id}.pdf"
-    - Content-Length: {file_size}
-    
-    **TC-SAFE:** Read-only, no compliance logic.
-    """
-)
-async def view_tc_pdf_by_id(
+async def _view_tc_pdf_impl(
     tc_pdf_id: str,
-    current_user: User = Depends(get_current_user),
-    db=Depends(get_database)
+    current_user: User,
+    db
 ):
     """
-    Stream the PDF file by its unique tc_pdf_id.
-    
-    TC-SAFE: Read-only consultation.
+    Internal implementation for PDF viewing.
+    Used by both /pdf/{tc_pdf_id} and /pdf-by-id/{tc_pdf_id}
     """
     from fastapi.responses import FileResponse
     from datetime import timezone
@@ -428,6 +411,117 @@ async def view_tc_pdf_by_id(
     if not reference:
         reference = await db.tc_sb.find_one({"tc_pdf_id": tc_pdf_id})
         ref_type = "SB"
+    
+    if not reference:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="PDF not found. Invalid tc_pdf_id."
+        )
+    
+    # Verify ownership via aircraft
+    aircraft_id = reference.get("import_aircraft_id")
+    if aircraft_id:
+        aircraft = await db.aircrafts.find_one({
+            "_id": aircraft_id,
+            "user_id": current_user.id
+        })
+        
+        if not aircraft:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view this PDF"
+            )
+    
+    # Get storage path
+    pdf_storage_path = reference.get("pdf_storage_path")
+    pdf_filename = reference.get("import_filename", f"tc_{tc_pdf_id}.pdf")
+    identifier = reference.get("ref", "unknown")
+    
+    if not pdf_storage_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="PDF_NOT_FOUND: No PDF file stored for this reference."
+        )
+    
+    full_path = f"/app/backend/{pdf_storage_path}"
+    
+    if not os.path.exists(full_path):
+        # Try to find by tc_pdf_id pattern in storage
+        pattern = f"/app/backend/storage/tc_pdfs/{tc_pdf_id}_*"
+        matches = glob.glob(pattern)
+        if matches:
+            full_path = matches[0]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"PDF_NOT_FOUND: File not found on disk."
+            )
+    
+    # Get file size
+    file_size = os.path.getsize(full_path)
+    
+    # Audit log
+    await db.tc_adsb_audit_log.insert_one({
+        "event_type": "TC_PDF_VIEWED",
+        "tc_pdf_id": tc_pdf_id,
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "reference": identifier,
+        "reference_type": ref_type,
+        "filename": pdf_filename,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    logger.info(f"[TC PDF VIEW] tc_pdf_id={tc_pdf_id} ref={identifier} ({file_size} bytes)")
+    
+    # Return PDF with iOS-compatible headers
+    return FileResponse(
+        path=full_path,
+        media_type="application/pdf",
+        filename=f"tc_{tc_pdf_id}.pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="tc_{tc_pdf_id}.pdf"',
+            "Content-Length": str(file_size),
+            "Cache-Control": "private, max-age=3600"
+        }
+    )
+
+
+@router.get(
+    "/pdf/{tc_pdf_id}",
+    summary="View imported TC PDF (ALIAS)",
+    description="Alias for /pdf-by-id/{tc_pdf_id} - Frontend compatibility."
+)
+async def view_tc_pdf_alias(
+    tc_pdf_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """Alias endpoint for frontend compatibility."""
+    return await _view_tc_pdf_impl(tc_pdf_id, current_user, db)
+
+
+@router.get(
+    "/pdf-by-id/{tc_pdf_id}",
+    summary="View imported TC PDF by tc_pdf_id",
+    description="""
+    Stream the PDF file using its unique tc_pdf_id (UUID).
+    
+    **Headers returned:**
+    - Content-Type: application/pdf
+    - Content-Disposition: inline; filename="tc_{tc_pdf_id}.pdf"
+    - Content-Length: {file_size}
+    
+    **TC-SAFE:** Read-only, no compliance logic.
+    """
+)
+async def view_tc_pdf_by_id(
+    tc_pdf_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """Stream the PDF file by its unique tc_pdf_id."""
+    return await _view_tc_pdf_impl(tc_pdf_id, current_user, db)
     
     if not reference:
         raise HTTPException(
