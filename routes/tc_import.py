@@ -410,8 +410,9 @@ async def delete_tc_reference(
     TC-SAFE: Only affects USER_IMPORTED_REFERENCE, never TC_BASELINE.
     """
     from datetime import timezone
+    import os
     
-    logger.info(f"TC Reference Delete | aircraft={aircraft_id} | ref={identifier} | user={current_user.id}")
+    logger.info(f"[TC PDF DELETE] aircraft={aircraft_id} ref={identifier}")
     
     # Validate aircraft ownership
     aircraft = await db.aircrafts.find_one({
@@ -425,27 +426,56 @@ async def delete_tc_reference(
             detail="Aircraft not found or not authorized"
         )
     
-    # Try to delete from tc_ad (USER_IMPORTED_REFERENCE only)
-    result_ad = await db.tc_ad.delete_one({
+    # First, get the reference to find PDF path (before deletion)
+    ref_to_delete = await db.tc_ad.find_one({
         "ref": identifier.upper(),
         "source": "TC_PDF_IMPORT",
         "import_aircraft_id": aircraft_id
     })
     
-    # Try to delete from tc_sb if not found in tc_ad
-    result_sb = await db.tc_sb.delete_one({
-        "ref": identifier.upper(),
-        "source": "TC_PDF_IMPORT",
-        "import_aircraft_id": aircraft_id
-    })
+    ref_type = "AD"
+    if not ref_to_delete:
+        ref_to_delete = await db.tc_sb.find_one({
+            "ref": identifier.upper(),
+            "source": "TC_PDF_IMPORT",
+            "import_aircraft_id": aircraft_id
+        })
+        ref_type = "SB"
     
-    total_deleted = result_ad.deleted_count + result_sb.deleted_count
-    
-    if total_deleted == 0:
+    if not ref_to_delete:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Reference not found or not a user-imported reference. TC_BASELINE cannot be deleted."
         )
+    
+    # Get PDF path before deletion
+    pdf_storage_path = ref_to_delete.get("pdf_storage_path")
+    
+    # Delete from MongoDB
+    if ref_type == "AD":
+        result = await db.tc_ad.delete_one({
+            "ref": identifier.upper(),
+            "source": "TC_PDF_IMPORT",
+            "import_aircraft_id": aircraft_id
+        })
+    else:
+        result = await db.tc_sb.delete_one({
+            "ref": identifier.upper(),
+            "source": "TC_PDF_IMPORT",
+            "import_aircraft_id": aircraft_id
+        })
+    
+    # Delete PDF file if exists
+    pdf_deleted = False
+    if pdf_storage_path:
+        full_path = f"/app/backend/{pdf_storage_path}"
+        if os.path.exists(full_path):
+            try:
+                os.remove(full_path)
+                pdf_deleted = True
+                logger.info(f"[TC PDF DELETE] Deleted PDF file: {pdf_storage_path}")
+            except Exception as e:
+                logger.warning(f"[TC PDF DELETE] Failed to delete PDF file: {e}")
     
     # Audit log
     await db.tc_adsb_audit_log.insert_one({
