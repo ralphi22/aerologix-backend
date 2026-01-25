@@ -253,3 +253,191 @@ async def get_import_history(
         "total_imports": len(history),
         "history": history
     }
+
+
+# ============================================================
+# ENDPOINT 3: VIEW PDF (STREAM)
+# ============================================================
+
+@router.get(
+    "/pdf/{aircraft_id}/{identifier}",
+    summary="View imported TC PDF",
+    description="""
+    Stream the PDF file associated with an imported AD/SB reference.
+    
+    **Security:**
+    - Only USER_IMPORTED_REFERENCE items
+    - Aircraft ownership validation
+    - Audit logged (TC_PDF_VIEWED)
+    
+    **TC-SAFE:** Read-only, no compliance logic.
+    """
+)
+async def view_tc_pdf(
+    aircraft_id: str,
+    identifier: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    Stream the PDF file for an imported AD/SB reference.
+    
+    TC-SAFE: Read-only consultation.
+    """
+    from fastapi.responses import Response
+    from datetime import timezone
+    
+    logger.info(f"TC PDF View | aircraft={aircraft_id} | ref={identifier} | user={current_user.id}")
+    
+    # Validate aircraft ownership
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aircraft not found or not authorized"
+        )
+    
+    # Find the reference (try AD first, then SB)
+    reference = await db.tc_ad.find_one({
+        "ref": identifier.upper(),
+        "source": "TC_PDF_IMPORT",
+        "import_aircraft_id": aircraft_id
+    })
+    
+    ref_type = "AD"
+    if not reference:
+        reference = await db.tc_sb.find_one({
+            "ref": identifier.upper(),
+            "source": "TC_PDF_IMPORT",
+            "import_aircraft_id": aircraft_id
+        })
+        ref_type = "SB"
+    
+    if not reference:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reference not found or not a user-imported reference"
+        )
+    
+    # Get filename
+    pdf_filename = reference.get("import_filename") or reference.get("last_import_filename")
+    if not pdf_filename:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No PDF file associated with this reference"
+        )
+    
+    # Audit log
+    await db.tc_adsb_audit_log.insert_one({
+        "event_type": "TC_PDF_VIEWED",
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "reference": identifier,
+        "reference_type": ref_type,
+        "filename": pdf_filename,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    # NOTE: PDF storage not implemented yet
+    # This endpoint structure is ready for when PDF storage is added
+    return {
+        "status": "info",
+        "message": "PDF storage not yet implemented. Reference metadata available.",
+        "reference": identifier,
+        "type": ref_type,
+        "filename": pdf_filename,
+        "tc_search_url": "https://wwwapps.tc.gc.ca/Saf-Sec-Sur/2/cawis-swimn/AD_h.aspx?lang=eng"
+    }
+
+
+# ============================================================
+# ENDPOINT 4: DELETE REFERENCE
+# ============================================================
+
+@router.delete(
+    "/reference/{aircraft_id}/{identifier}",
+    summary="Delete imported TC reference",
+    description="""
+    Delete a USER_IMPORTED_REFERENCE AD/SB.
+    
+    **Security:**
+    - Only USER_IMPORTED_REFERENCE items can be deleted
+    - TC_BASELINE items are NEVER deletable
+    - Aircraft ownership validation
+    - Audit logged (TC_PDF_REFERENCE_DELETED)
+    
+    **TC-SAFE:** Does not affect canonical TC data.
+    """
+)
+async def delete_tc_reference(
+    aircraft_id: str,
+    identifier: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    Delete a user-imported AD/SB reference.
+    
+    TC-SAFE: Only affects USER_IMPORTED_REFERENCE, never TC_BASELINE.
+    """
+    from datetime import timezone
+    
+    logger.info(f"TC Reference Delete | aircraft={aircraft_id} | ref={identifier} | user={current_user.id}")
+    
+    # Validate aircraft ownership
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aircraft not found or not authorized"
+        )
+    
+    # Try to delete from tc_ad (USER_IMPORTED_REFERENCE only)
+    result_ad = await db.tc_ad.delete_one({
+        "ref": identifier.upper(),
+        "source": "TC_PDF_IMPORT",
+        "import_aircraft_id": aircraft_id
+    })
+    
+    # Try to delete from tc_sb if not found in tc_ad
+    result_sb = await db.tc_sb.delete_one({
+        "ref": identifier.upper(),
+        "source": "TC_PDF_IMPORT",
+        "import_aircraft_id": aircraft_id
+    })
+    
+    total_deleted = result_ad.deleted_count + result_sb.deleted_count
+    
+    if total_deleted == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reference not found or not a user-imported reference. TC_BASELINE cannot be deleted."
+        )
+    
+    # Audit log
+    await db.tc_adsb_audit_log.insert_one({
+        "event_type": "TC_PDF_REFERENCE_DELETED",
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "reference": identifier,
+        "deleted_from_ad": result_ad.deleted_count > 0,
+        "deleted_from_sb": result_sb.deleted_count > 0,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    logger.info(f"TC Reference Deleted | ref={identifier} | AD={result_ad.deleted_count} | SB={result_sb.deleted_count}")
+    
+    return {
+        "success": True,
+        "message": f"Reference {identifier} deleted successfully",
+        "reference": identifier,
+        "deleted_count": total_deleted
+    }
