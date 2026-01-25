@@ -197,7 +197,7 @@ class BaselineItem(BaseModel):
     title: Optional[str] = None
     effective_date: Optional[str] = None
     recurrence_raw: Optional[str] = None  # Raw recurrence type (ONCE, HOURS, etc.)
-201|    recurrence_value: Optional[int] = None
+    recurrence_value: Optional[int] = None
     count_seen: int = 0  # Number of OCR Apply occurrences
     last_seen_date: Optional[str] = None  # Most recent OCR detection
     status: str = "NOT_FOUND"  # FOUND or NOT_FOUND (neutral, no compliance)
