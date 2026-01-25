@@ -58,9 +58,9 @@ async def create_test_pdf():
     page.insert_text((50, 50), """
 TRANSPORT CANADA AIRWORTHINESS DIRECTIVE
 
-CF-TEST-001: Test AD for Regression
-CF-TEST-002: Another Test AD
-SB-TEST-001: Test Service Bulletin
+CF-2099-01: Test AD for Regression Testing
+CF-2099-02: Another Test AD for Regression
+SB-172-2099-01: Test Service Bulletin
 
 This is a test document for regression testing.
 """, fontsize=11)
