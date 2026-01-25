@@ -347,10 +347,14 @@ class TCPDFImportService:
                         "source": ImportSource.TC_PDF_IMPORT.value,
                         "scope": ref_data.scope.value,
                         "updated_at": now,
-                        "last_import_filename": filename,
-                        "last_import_user": user_id,
-                        "import_aircraft_id": aircraft_id,  # CRITICAL: Link to aircraft for baseline query
+                        "import_filename": filename,
+                        "import_user": user_id,
+                        "import_aircraft_id": aircraft_id,
                     }
+                    
+                    # Add PDF storage path if available
+                    if pdf_storage_path:
+                        update_data["pdf_storage_path"] = pdf_storage_path
                     
                     # Only update title if we found one and existing is empty
                     if ref_data.title and not existing.get("title"):
@@ -382,6 +386,10 @@ class TCPDFImportService:
                     "import_user": user_id,
                     "import_aircraft_id": aircraft_id,
                 }
+                
+                # Add PDF storage path if available
+                if pdf_storage_path:
+                    doc["pdf_storage_path"] = pdf_storage_path
                 
                 # Add manufacturer/model if provided
                 if ref_data.manufacturer:
