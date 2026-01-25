@@ -39,6 +39,23 @@ class RecurrenceType(str, Enum):
     CALENDAR = "CALENDAR"   # Calendar-based (months)
 
 
+class ImportSource(str, Enum):
+    """Source of AD/SB data - for traceability"""
+    TC_SEED = "TC_SEED"           # Initial seed/test data
+    TC_PDF_IMPORT = "TC_PDF_IMPORT"  # Manual PDF import by user
+    TC_CAWIS = "TC_CAWIS"         # CAWIS web import (future)
+    TC_OFFICIAL = "TC_OFFICIAL"   # Official TC database (authoritative)
+
+
+class ADSBScope(str, Enum):
+    """Scope of AD/SB applicability"""
+    AIRFRAME = "airframe"
+    ENGINE = "engine"
+    PROPELLER = "propeller"
+    APPLIANCE = "appliance"
+    UNSPECIFIED = "unspecified"
+
+
 class ComparisonStatus(str, Enum):
     """Status of comparison (TC-SAFE: never compliance)"""
     OK = "OK"                       # Item found, not due
