@@ -258,6 +258,46 @@ class TCPDFImportService:
         return ADSBScope.UNSPECIFIED
     
     # --------------------------------------------------------
+    # PDF FILE STORAGE
+    # --------------------------------------------------------
+    
+    async def store_pdf_file(
+        self,
+        pdf_bytes: bytes,
+        filename: str,
+        aircraft_id: str,
+        user_id: str
+    ) -> str:
+        """
+        Store PDF file to local filesystem.
+        
+        Returns:
+            Storage path relative to storage directory
+        """
+        import os
+        import hashlib
+        
+        # Create unique filename: {aircraft_id}_{timestamp}_{hash}_{original_filename}
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        file_hash = hashlib.md5(pdf_bytes[:1024]).hexdigest()[:8]
+        safe_filename = "".join(c if c.isalnum() or c in ".-_" else "_" for c in filename)
+        
+        storage_filename = f"{aircraft_id}_{timestamp}_{file_hash}_{safe_filename}"
+        storage_path = f"storage/tc_pdfs/{storage_filename}"
+        full_path = f"/app/backend/{storage_path}"
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        
+        # Write file
+        with open(full_path, "wb") as f:
+            f.write(pdf_bytes)
+        
+        logger.info(f"[TC PDF STORAGE] Saved: {storage_path} ({len(pdf_bytes)} bytes)")
+        
+        return storage_path
+    
+    # --------------------------------------------------------
     # MONGODB UPSERT
     # --------------------------------------------------------
     
@@ -266,7 +306,8 @@ class TCPDFImportService:
         references: List[ExtractedReference],
         aircraft_id: str,
         user_id: str,
-        filename: str
+        filename: str,
+        pdf_storage_path: str = None
     ) -> Tuple[int, int, int]:
         """
         Upsert extracted references into MongoDB.
@@ -279,6 +320,7 @@ class TCPDFImportService:
             aircraft_id: Aircraft ID for context
             user_id: User performing import
             filename: Original filename for audit
+            pdf_storage_path: Path to stored PDF file
             
         Returns:
             Tuple of (inserted, updated, skipped)
