@@ -511,7 +511,10 @@ async def get_adsb_baseline(
         eff_str = eff_date.strftime("%Y-%m-%d") if hasattr(eff_date, 'strftime') else str(eff_date)[:10] if eff_date else None
         
         # Get stable IDs for USER_IMPORTED_REFERENCE
+        # tc_reference_id = MongoDB _id (for DELETE)
+        # tc_pdf_id = UUID of PDF file (for GET PDF)
         tc_reference_id = str(sb.get("_id")) if sb.get("_id") else sb.get("ref")
+        tc_pdf_id = sb.get("tc_pdf_id")  # UUID from import
         created_at = sb.get("created_at")
         imported_at_str = created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at) if created_at else None
         
@@ -526,10 +529,11 @@ async def get_adsb_baseline(
             last_seen_date=last_seen,
             status="FOUND" if count_seen > 0 else "NOT_FOUND",
             origin="USER_IMPORTED_REFERENCE",
-            pdf_available=True,
+            source="TC_PDF_IMPORT",
+            pdf_available=bool(tc_pdf_id),
             pdf_filename=import_filename,
             tc_reference_id=tc_reference_id,
-            tc_pdf_id=sb.get("pdf_storage_path"),
+            tc_pdf_id=tc_pdf_id,
             imported_at=imported_at_str,
         ))
         user_imported_sb_count += 1
