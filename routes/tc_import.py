@@ -493,12 +493,130 @@ async def delete_tc_reference(
         "created_at": datetime.now(timezone.utc)
     })
     
-    logger.info(f"[TC PDF DELETE] aircraft={aircraft_id} ref={identifier} - Deleted")
+    logger.info(f"[TC PDF DELETE] aircraft={aircraft_id} ref={identifier} tc_reference_id={str(ref_to_delete.get('_id'))} user={current_user.id}")
     
     return {
+        "ok": True,
         "success": True,
         "message": f"Reference {identifier} deleted successfully",
         "reference": identifier,
+        "tc_reference_id": str(ref_to_delete.get("_id")),
         "type": ref_type,
-        "pdf_deleted": pdf_deleted
+        "pdf_deleted": pdf_deleted,
+        "deleted_count": 1
+    }
+
+
+# ============================================================
+# ENDPOINT 5: DELETE BY TC_REFERENCE_ID (alternative)
+# ============================================================
+
+@router.delete(
+    "/reference-by-id/{tc_reference_id}",
+    summary="Delete imported TC reference by ID",
+    description="""
+    Delete a USER_IMPORTED_REFERENCE AD/SB by its tc_reference_id.
+    
+    **Security:**
+    - Only USER_IMPORTED_REFERENCE items can be deleted
+    - TC_BASELINE items are NEVER deletable
+    - User ownership validation
+    - Audit logged (TC_PDF_REFERENCE_DELETED)
+    
+    **TC-SAFE:** Does not affect canonical TC data.
+    """
+)
+async def delete_tc_reference_by_id(
+    tc_reference_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    Delete a user-imported AD/SB reference by its stable ID.
+    
+    TC-SAFE: Only affects USER_IMPORTED_REFERENCE, never TC_BASELINE.
+    """
+    from datetime import timezone
+    import os
+    
+    logger.info(f"[TC PDF DELETE] tc_reference_id={tc_reference_id} user={current_user.id}")
+    
+    # Find the reference by _id (try AD first, then SB)
+    reference = await db.tc_ad.find_one({
+        "_id": tc_reference_id,
+        "source": "TC_PDF_IMPORT"
+    })
+    
+    ref_type = "AD"
+    collection = db.tc_ad
+    
+    if not reference:
+        reference = await db.tc_sb.find_one({
+            "_id": tc_reference_id,
+            "source": "TC_PDF_IMPORT"
+        })
+        ref_type = "SB"
+        collection = db.tc_sb
+    
+    if not reference:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reference not found or not a user-imported reference. TC_BASELINE cannot be deleted."
+        )
+    
+    # Verify ownership via aircraft
+    aircraft_id = reference.get("import_aircraft_id")
+    if aircraft_id:
+        aircraft = await db.aircrafts.find_one({
+            "_id": aircraft_id,
+            "user_id": current_user.id
+        })
+        
+        if not aircraft:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to delete this reference"
+            )
+    
+    identifier = reference.get("ref", "")
+    pdf_storage_path = reference.get("pdf_storage_path")
+    
+    # Delete from MongoDB
+    result = await collection.delete_one({"_id": tc_reference_id})
+    
+    # Delete PDF file if exists
+    pdf_deleted = False
+    if pdf_storage_path:
+        full_path = f"/app/backend/{pdf_storage_path}"
+        if os.path.exists(full_path):
+            try:
+                os.remove(full_path)
+                pdf_deleted = True
+                logger.info(f"[TC PDF DELETE] Deleted PDF file: {pdf_storage_path}")
+            except Exception as e:
+                logger.warning(f"[TC PDF DELETE] Failed to delete PDF file: {e}")
+    
+    # Audit log
+    await db.tc_adsb_audit_log.insert_one({
+        "event_type": "TC_PDF_REFERENCE_DELETED",
+        "tc_reference_id": tc_reference_id,
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "reference": identifier,
+        "reference_type": ref_type,
+        "pdf_deleted": pdf_deleted,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    logger.info(f"[TC PDF DELETE] tc_reference_id={tc_reference_id} ref={identifier} aircraft={aircraft_id} user={current_user.id} deleted_count={result.deleted_count}")
+    
+    return {
+        "ok": True,
+        "success": True,
+        "message": f"Reference {identifier} deleted successfully",
+        "reference": identifier,
+        "tc_reference_id": tc_reference_id,
+        "type": ref_type,
+        "pdf_deleted": pdf_deleted,
+        "deleted_count": result.deleted_count
     }
