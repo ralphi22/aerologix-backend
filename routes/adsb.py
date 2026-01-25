@@ -205,6 +205,10 @@ class BaselineItem(BaseModel):
     # PDF import metadata (USER_IMPORTED_REFERENCE only)
     pdf_available: bool = False
     pdf_filename: Optional[str] = None
+    # Stable IDs for USER_IMPORTED_REFERENCE (for delete/view operations)
+    tc_reference_id: Optional[str] = None  # MongoDB _id as string
+    tc_pdf_id: Optional[str] = None  # PDF storage identifier
+    imported_at: Optional[str] = None  # ISO datetime when imported
     # TC search link (generic, TC-SAFE)
     tc_search_url: str = "https://wwwapps.tc.gc.ca/Saf-Sec-Sur/2/cawis-swimn/AD_h.aspx?lang=eng"
 
