@@ -445,6 +445,11 @@ async def get_adsb_baseline(
         eff_date = ad.get("effective_date")
         eff_str = eff_date.strftime("%Y-%m-%d") if hasattr(eff_date, 'strftime') else str(eff_date)[:10] if eff_date else None
         
+        # Get stable IDs for USER_IMPORTED_REFERENCE
+        tc_reference_id = str(ad.get("_id")) if ad.get("_id") else ad.get("ref")
+        created_at = ad.get("created_at")
+        imported_at_str = created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at) if created_at else None
+        
         ad_list.append(BaselineItem(
             identifier=identifier,
             type="AD",
@@ -458,6 +463,9 @@ async def get_adsb_baseline(
             origin="USER_IMPORTED_REFERENCE",
             pdf_available=True,
             pdf_filename=import_filename,
+            tc_reference_id=tc_reference_id,
+            tc_pdf_id=ad.get("pdf_storage_path"),
+            imported_at=imported_at_str,
         ))
         user_imported_ad_count += 1
     
