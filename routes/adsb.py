@@ -285,10 +285,20 @@ async def get_adsb_baseline(
     ocr_references, doc_count = await service.get_ocr_adsb_references(aircraft_id, current_user.id)
     
     # Fetch TC AD baseline from MongoDB
+    # ONLY canonical TC data (source != OCR_SCAN, != USER_MANUAL)
+    # TC_PDF_IMPORT items are handled separately below
     ad_list = []
-    async for ad in db.tc_ad.find({"is_active": True}):
+    async for ad in db.tc_ad.find({
+        "is_active": True,
+        "source": {"$nin": ["OCR_SCAN", "USER_MANUAL"]}  # Exclude non-TC sources
+    }):
         # Check if applies to this aircraft (by designator or manufacturer+model)
         applies = False
+        
+        # Skip TC_PDF_IMPORT items here - they are added separately by aircraft_id
+        if ad.get("source") == "TC_PDF_IMPORT":
+            continue
+        
         if designator and ad.get("designator") == designator:
             applies = True
         elif service._model_matches(model, ad.get("model", "")) and \
@@ -324,6 +334,7 @@ async def get_adsb_baseline(
                 count_seen=count_seen,
                 last_seen_date=last_seen,
                 status="FOUND" if count_seen > 0 else "NOT_FOUND",
+                origin="TC_BASELINE",  # Explicit: canonical TC data
             ))
     
     # Fetch TC SB baseline from MongoDB
