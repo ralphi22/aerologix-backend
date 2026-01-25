@@ -392,9 +392,11 @@ class TCPDFImportService:
                     "import_aircraft_id": aircraft_id,
                 }
                 
-                # Add PDF storage path if available
+                # Add PDF identifiers if available
                 if pdf_storage_path:
                     doc["pdf_storage_path"] = pdf_storage_path
+                if tc_pdf_id:
+                    doc["tc_pdf_id"] = tc_pdf_id
                 
                 # Add manufacturer/model if provided
                 if ref_data.manufacturer:
@@ -405,7 +407,7 @@ class TCPDFImportService:
                 try:
                     await collection.insert_one(doc)
                     inserted += 1
-                    logger.info(f"Inserted {ref_data.type} {ref_data.ref}")
+                    logger.info(f"Inserted {ref_data.type} {ref_data.ref} tc_pdf_id={tc_pdf_id}")
                 except Exception as e:
                     # Duplicate key - race condition, skip
                     logger.warning(f"Insert failed for {ref_data.ref}: {e}")
