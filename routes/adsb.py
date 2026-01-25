@@ -202,6 +202,11 @@ class BaselineItem(BaseModel):
     last_seen_date: Optional[str] = None  # Most recent OCR detection
     status: str = "NOT_FOUND"  # FOUND or NOT_FOUND (neutral, no compliance)
     origin: str = "TC_BASELINE"  # TC_BASELINE or USER_IMPORTED_REFERENCE
+    # PDF import metadata (USER_IMPORTED_REFERENCE only)
+    pdf_available: bool = False
+    pdf_filename: Optional[str] = None
+    # TC search link (generic, TC-SAFE)
+    tc_search_url: str = "https://wwwapps.tc.gc.ca/Saf-Sec-Sur/2/cawis-swimn/AD_h.aspx?lang=eng"
 
 
 class BaselineResponse(BaseModel):
