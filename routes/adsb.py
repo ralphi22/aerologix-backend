@@ -365,6 +365,109 @@ async def get_adsb_baseline(
                 status="FOUND" if count_seen > 0 else "NOT_FOUND",
             ))
     
+    # ============================================================
+    # PATCH: ADD USER-IMPORTED AD/SB FROM TC_PDF_IMPORT
+    # ============================================================
+    # These are references imported manually by user via PDF upload.
+    # They are linked to this specific aircraft, not by type/model.
+    # TC-SAFE: Marked as USER_IMPORTED_REFERENCE, not canonical TC data.
+    
+    existing_ad_refs = {item.identifier for item in ad_list}
+    existing_sb_refs = {item.identifier for item in sb_list}
+    
+    user_imported_ad_count = 0
+    user_imported_sb_count = 0
+    
+    # Query AD imported for this specific aircraft via PDF
+    async for ad in db.tc_ad.find({
+        "source": "TC_PDF_IMPORT",
+        "import_aircraft_id": aircraft_id,
+        "is_active": True
+    }):
+        identifier = ad.get("ref", "")
+        
+        # Skip if already in canonical baseline (union by ref)
+        if identifier in existing_ad_refs:
+            continue
+        
+        norm_id = service._normalize_identifier(identifier)
+        
+        # Count OCR occurrences (same logic as canonical)
+        count_seen = 0
+        all_dates = []
+        for ocr_ref, dates in ocr_references.items():
+            if service._identifiers_match(norm_id, ocr_ref):
+                count_seen += len(dates)
+                all_dates.extend(dates)
+        
+        sorted_dates = sorted(set(all_dates), reverse=True)
+        last_seen = sorted_dates[0] if sorted_dates else None
+        
+        eff_date = ad.get("effective_date")
+        eff_str = eff_date.strftime("%Y-%m-%d") if hasattr(eff_date, 'strftime') else str(eff_date)[:10] if eff_date else None
+        
+        ad_list.append(BaselineItem(
+            identifier=identifier,
+            type="AD",
+            title=ad.get("title"),
+            effective_date=eff_str,
+            recurrence_raw=ad.get("recurrence_type"),
+            recurrence_value=ad.get("recurrence_value"),
+            count_seen=count_seen,
+            last_seen_date=last_seen,
+            status="FOUND" if count_seen > 0 else "NOT_FOUND",
+            origin="USER_IMPORTED_REFERENCE",
+        ))
+        user_imported_ad_count += 1
+    
+    # Query SB imported for this specific aircraft via PDF
+    async for sb in db.tc_sb.find({
+        "source": "TC_PDF_IMPORT",
+        "import_aircraft_id": aircraft_id,
+        "is_active": True
+    }):
+        identifier = sb.get("ref", "")
+        
+        # Skip if already in canonical baseline
+        if identifier in existing_sb_refs:
+            continue
+        
+        norm_id = service._normalize_identifier(identifier)
+        
+        count_seen = 0
+        all_dates = []
+        for ocr_ref, dates in ocr_references.items():
+            if service._identifiers_match(norm_id, ocr_ref):
+                count_seen += len(dates)
+                all_dates.extend(dates)
+        
+        sorted_dates = sorted(set(all_dates), reverse=True)
+        last_seen = sorted_dates[0] if sorted_dates else None
+        
+        eff_date = sb.get("effective_date")
+        eff_str = eff_date.strftime("%Y-%m-%d") if hasattr(eff_date, 'strftime') else str(eff_date)[:10] if eff_date else None
+        
+        sb_list.append(BaselineItem(
+            identifier=identifier,
+            type="SB",
+            title=sb.get("title"),
+            effective_date=eff_str,
+            recurrence_raw=sb.get("recurrence_type"),
+            recurrence_value=sb.get("recurrence_value"),
+            count_seen=count_seen,
+            last_seen_date=last_seen,
+            status="FOUND" if count_seen > 0 else "NOT_FOUND",
+            origin="USER_IMPORTED_REFERENCE",
+        ))
+        user_imported_sb_count += 1
+    
+    # Log user-imported additions (TC-SAFE audit)
+    if user_imported_ad_count > 0 or user_imported_sb_count > 0:
+        logger.info(
+            f"[AD/SB BASELINE] +{user_imported_ad_count} AD, +{user_imported_sb_count} SB "
+            f"user-imported references added from TC_PDF_IMPORT"
+        )
+    
     # Sort by identifier
     ad_list.sort(key=lambda x: x.identifier)
     sb_list.sort(key=lambda x: x.identifier)
