@@ -598,13 +598,13 @@ async def delete_tc_reference(
     
     # Delete from MongoDB
     if ref_type == "AD":
-        result = await db.tc_ad.delete_one({
+        delete_result = await db.tc_ad.delete_one({
             "ref": identifier.upper(),
             "source": "TC_PDF_IMPORT",
             "import_aircraft_id": aircraft_id
         })
     else:
-        result = await db.tc_sb.delete_one({
+        delete_result = await db.tc_sb.delete_one({
             "ref": identifier.upper(),
             "source": "TC_PDF_IMPORT",
             "import_aircraft_id": aircraft_id
@@ -643,7 +643,7 @@ async def delete_tc_reference(
         "tc_reference_id": str(ref_to_delete.get("_id")),
         "type": ref_type,
         "pdf_deleted": pdf_deleted,
-        "deleted_count": 1
+        "deleted_count": delete_result.deleted_count
     }
 
 
