@@ -99,6 +99,10 @@ class TCADBase(BaseModel):
     # Status
     is_active: bool = Field(default=True, description="Whether AD is currently active")
     superseded_by: Optional[str] = Field(None, description="Reference of superseding AD")
+    
+    # Traceability (NEW for Phase 1)
+    source: ImportSource = Field(default=ImportSource.TC_SEED, description="Origin of this data")
+    scope: ADSBScope = Field(default=ADSBScope.UNSPECIFIED, description="Applicability scope")
 
 
 class TCAD(TCADBase):
