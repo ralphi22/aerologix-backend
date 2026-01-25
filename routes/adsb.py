@@ -502,8 +502,17 @@ async def get_adsb_baseline(
             last_seen_date=last_seen,
             status="FOUND" if count_seen > 0 else "NOT_FOUND",
             origin="USER_IMPORTED_REFERENCE",
+            pdf_available=True,
+            pdf_filename=import_filename,
         ))
         user_imported_sb_count += 1
+    
+    # Log filtered ghosts
+    if ghost_ad_filtered > 0 or ghost_sb_filtered > 0:
+        logger.info(
+            f"[AD/SB BASELINE] Filtered {ghost_ad_filtered} ghost AD, {ghost_sb_filtered} ghost SB "
+            f"(missing import_filename)"
+        )
     
     # Log user-imported additions (TC-SAFE audit)
     if user_imported_ad_count > 0 or user_imported_sb_count > 0:
