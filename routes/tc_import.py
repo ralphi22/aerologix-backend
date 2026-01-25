@@ -338,6 +338,9 @@ async def view_tc_pdf(
     if pdf_storage_path:
         full_path = f"/app/backend/{pdf_storage_path}"
         if os.path.exists(full_path):
+            # Get file size for Content-Length
+            file_size = os.path.getsize(full_path)
+            
             # Audit log
             await db.tc_adsb_audit_log.insert_one({
                 "event_type": "TC_PDF_VIEWED",
@@ -349,15 +352,17 @@ async def view_tc_pdf(
                 "created_at": datetime.now(timezone.utc)
             })
             
-            logger.info(f"[TC PDF VIEW] aircraft={aircraft_id} ref={identifier} - Streaming PDF")
+            logger.info(f"[TC PDF VIEW] aircraft={aircraft_id} ref={identifier} - Streaming PDF ({file_size} bytes)")
             
-            # Return PDF file with proper headers
+            # Return PDF file with proper headers for iOS compatibility
             return FileResponse(
                 path=full_path,
                 media_type="application/pdf",
-                filename=pdf_filename,
+                filename=f"tc_adsb_{identifier}.pdf",
                 headers={
-                    "Content-Disposition": f'inline; filename="{pdf_filename}"'
+                    "Content-Disposition": f'inline; filename="tc_adsb_{identifier}.pdf"',
+                    "Content-Length": str(file_size),
+                    "Cache-Control": "private, max-age=3600"
                 }
             )
     
