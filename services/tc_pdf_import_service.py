@@ -214,7 +214,7 @@ class TCPDFImportService:
         """Try to extract title from context."""
         patterns = [
             rf'{re.escape(ref)}[\s:–-]+([A-Za-z][^.\n]{{10,100}})',
-            rf'(?:Subject|Title|Objet)[\s:]+([A-Za-z][^.\n]{{10,100}})',
+            r'(?:Subject|Title|Objet)[\s:]+([A-Za-z][^.\n]{10,100})',
         ]
         
         for pattern in patterns:
