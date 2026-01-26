@@ -1,25 +1,33 @@
 """
-TC PDF Import Service
+TC PDF Import Service (V2)
 
 Extracts AD/SB references from Transport Canada PDF documents.
+Utilise les collections dédiées: tc_pdf_imports et tc_imported_references.
 
 TC-SAFE:
 - Import only, no compliance decisions
 - Source tracking for traceability
 - Audit trail for all imports
 
-PATCH MINIMAL: Does not modify existing AD/SB logic.
+SÉPARATION STRICTE:
+- Ne touche PAS aux collections tc_ad/tc_sb (données canoniques TC)
+- Utilise tc_pdf_imports pour les PDF
+- Utilise tc_imported_references pour les références
 """
 
 import re
 import fitz  # PyMuPDF
+import os
+import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
 from enum import Enum
+from bson import ObjectId
 import logging
-import io
+
+from services.tc_pdf_db_service import TCPDFDatabaseService
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +38,9 @@ logger = logging.getLogger(__name__)
 
 class ImportSource(str, Enum):
     """Source of AD/SB data import"""
-    TC_SEED = "TC_SEED"           # Initial seed data
-    TC_PDF_IMPORT = "TC_PDF_IMPORT"  # Manual PDF import
-    TC_CAWIS = "TC_CAWIS"         # CAWIS web import (future)
+    TC_SEED = "TC_SEED"
+    TC_PDF_IMPORT = "TC_PDF_IMPORT"
+    TC_CAWIS = "TC_CAWIS"
 
 
 class ADSBScope(str, Enum):
@@ -49,11 +57,8 @@ class ExtractedReference(BaseModel):
     ref: str
     type: str  # "AD" or "SB"
     title: Optional[str] = None
-    effective_date: Optional[str] = None
-    manufacturer: Optional[str] = None
-    model: Optional[str] = None
     scope: ADSBScope = ADSBScope.UNSPECIFIED
-    raw_text: Optional[str] = None  # Original text snippet for audit
+    raw_text: Optional[str] = None
 
 
 class PDFImportResult(BaseModel):
@@ -63,25 +68,20 @@ class PDFImportResult(BaseModel):
     pages_processed: int
     references_found: int
     references_inserted: int
-    references_updated: int
     references_skipped: int
+    tc_pdf_id: Optional[str] = None
     references: List[ExtractedReference] = []
     errors: List[str] = []
     source: str = ImportSource.TC_PDF_IMPORT.value
 
 
-class PDFImportAuditEntry(BaseModel):
-    """Audit log entry for PDF import"""
-    event_type: str = "TC_PDF_IMPORT"
-    aircraft_id: str
-    user_id: str
-    filename: str
-    pages_processed: int
-    references_found: int
-    references_inserted: int
-    references_updated: int
-    source: str = ImportSource.TC_PDF_IMPORT.value
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+class ImportedReferenceInfo(BaseModel):
+    """Info about an imported reference for API response"""
+    tc_reference_id: str  # MongoDB ObjectId (24-char hex)
+    identifier: str       # CF-xxxx (display only)
+    type: str            # AD or SB
+    title: Optional[str] = None
+    tc_pdf_id: str       # UUID for PDF access
 
 
 # ============================================================
@@ -92,24 +92,27 @@ class TCPDFImportService:
     """
     Service for importing AD/SB references from TC PDF documents.
     
+    Uses dedicated collections:
+    - tc_pdf_imports: PDF file metadata
+    - tc_imported_references: Extracted references linked to aircraft
+    
     TC-SAFE: Import only, no compliance logic.
     """
     
     # AD/SB reference patterns (Transport Canada formats)
     AD_PATTERNS = [
-        r'CF[-\s]?\d{4}[-\s]?\d{1,3}[A-Z]?',      # CF-2020-01, CF-2024-12R
-        r'AD[-\s]?\d{4}[-\s]?\d{1,4}',             # AD-2020-0001
-        r'CAR[-\s]?\d{4}[-\s]?\d{1,3}',            # CAR-2020-01 (older format)
-        r'FAA[-\s]AD[-\s]?\d{4}[-\s]?\d{1,4}[-\s]?\d*',  # FAA AD refs adopted by TC
+        r'CF[-\s]?\d{4}[-\s]?\d{1,3}[A-Z]?',
+        r'AD[-\s]?\d{4}[-\s]?\d{1,4}',
+        r'CAR[-\s]?\d{4}[-\s]?\d{1,3}',
+        r'FAA[-\s]AD[-\s]?\d{4}[-\s]?\d{1,4}[-\s]?\d*',
     ]
     
     SB_PATTERNS = [
-        r'SB[-\s]?\d{2,4}[-\s]?\d{1,4}[-\s]?\d{0,2}',  # SB-172-001, SB-2020-01
-        r'SIL[-\s]?\d{2,4}[-\s]?\d{1,4}',              # Service Information Letters
-        r'SEL[-\s]?\d{2,4}[-\s]?\d{1,4}',              # Service Engineering Letters
+        r'SB[-\s]?\d{2,4}[-\s]?\d{1,4}[-\s]?\d{0,2}',
+        r'SIL[-\s]?\d{2,4}[-\s]?\d{1,4}',
+        r'SEL[-\s]?\d{2,4}[-\s]?\d{1,4}',
     ]
     
-    # Scope detection keywords
     SCOPE_KEYWORDS = {
         ADSBScope.ENGINE: ['engine', 'moteur', 'powerplant', 'turbine', 'piston'],
         ADSBScope.PROPELLER: ['propeller', 'hélice', 'prop', 'blade'],
@@ -119,21 +122,14 @@ class TCPDFImportService:
     
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
+        self.db_service = TCPDFDatabaseService(db)
     
     # --------------------------------------------------------
     # PDF TEXT EXTRACTION
     # --------------------------------------------------------
     
     def extract_text_from_pdf(self, pdf_bytes: bytes) -> Tuple[str, int]:
-        """
-        Extract all text from PDF file.
-        
-        Args:
-            pdf_bytes: PDF file content as bytes
-            
-        Returns:
-            Tuple of (extracted_text, page_count)
-        """
+        """Extract all text from PDF file."""
         try:
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             text_parts = []
@@ -158,15 +154,7 @@ class TCPDFImportService:
     # --------------------------------------------------------
     
     def extract_references(self, text: str) -> List[ExtractedReference]:
-        """
-        Extract AD/SB references from text.
-        
-        Args:
-            text: Full text from PDF
-            
-        Returns:
-            List of ExtractedReference objects
-        """
+        """Extract AD/SB references from text."""
         references = []
         seen_refs = set()
         
@@ -178,7 +166,6 @@ class TCPDFImportService:
                 if ref and ref not in seen_refs:
                     seen_refs.add(ref)
                     
-                    # Get context (surrounding text)
                     start = max(0, match.start() - 100)
                     end = min(len(text), match.end() + 200)
                     context = text[start:end]
@@ -188,7 +175,7 @@ class TCPDFImportService:
                         type="AD",
                         title=self._extract_title(context, ref),
                         scope=self._detect_scope(context),
-                        raw_text=context[:300],  # Limit for storage
+                        raw_text=context[:300],
                     ))
         
         # Extract SBs
@@ -215,22 +202,16 @@ class TCPDFImportService:
         return references
     
     def _normalize_reference(self, ref: str) -> str:
-        """Normalize reference format (uppercase, consistent separators)."""
+        """Normalize reference format."""
         if not ref:
             return ""
-        
-        # Uppercase and clean
         ref = ref.strip().upper()
-        
-        # Standardize separators
         ref = re.sub(r'\s+', '-', ref)
         ref = re.sub(r'-+', '-', ref)
-        
         return ref
     
     def _extract_title(self, context: str, ref: str) -> Optional[str]:
-        """Try to extract title from context around reference."""
-        # Look for common patterns like "CF-2020-01: Title Here" or "CF-2020-01 - Title"
+        """Try to extract title from context."""
         patterns = [
             rf'{re.escape(ref)}[\s:–-]+([A-Za-z][^.\n]{{10,100}})',
             rf'(?:Subject|Title|Objet)[\s:]+([A-Za-z][^.\n]{{10,100}})',
@@ -240,14 +221,13 @@ class TCPDFImportService:
             match = re.search(pattern, context, re.IGNORECASE)
             if match:
                 title = match.group(1).strip()
-                # Clean up title
                 title = re.sub(r'\s+', ' ', title)
-                return title[:200]  # Limit length
+                return title[:200]
         
         return None
     
     def _detect_scope(self, context: str) -> ADSBScope:
-        """Detect scope (airframe/engine/propeller) from context."""
+        """Detect scope from context."""
         context_lower = context.lower()
         
         for scope, keywords in self.SCOPE_KEYWORDS.items():
@@ -265,23 +245,18 @@ class TCPDFImportService:
         self,
         pdf_bytes: bytes,
         filename: str,
-        aircraft_id: str,
         user_id: str
-    ) -> str:
+    ) -> Tuple[str, str]:
         """
-        Store PDF file to local filesystem.
+        Store PDF file to local filesystem and create tc_pdf_imports record.
         
         Returns:
-            Tuple of (storage_path, tc_pdf_id)
+            Tuple[str, str]: (storage_path, tc_pdf_id)
         """
-        import os
-        import hashlib
-        import uuid
-        
         # Generate unique PDF ID
         tc_pdf_id = str(uuid.uuid4())
         
-        # Create unique filename: {tc_pdf_id}_{original_filename}
+        # Create storage path
         safe_filename = "".join(c if c.isalnum() or c in ".-_" else "_" for c in filename)
         storage_filename = f"{tc_pdf_id}_{safe_filename}"
         storage_path = f"storage/tc_pdfs/{storage_filename}"
@@ -294,130 +269,83 @@ class TCPDFImportService:
         with open(full_path, "wb") as f:
             f.write(pdf_bytes)
         
-        logger.info(f"[TC PDF STORAGE] Saved: tc_pdf_id={tc_pdf_id} path={storage_path} ({len(pdf_bytes)} bytes)")
+        file_size = len(pdf_bytes)
+        
+        # Create tc_pdf_imports document
+        doc = {
+            "tc_pdf_id": tc_pdf_id,
+            "filename": filename,
+            "storage_path": storage_path,
+            "content_type": "application/pdf",
+            "file_size_bytes": file_size,
+            "source": "TRANSPORT_CANADA",
+            "imported_by": user_id,
+            "imported_at": datetime.now(timezone.utc)
+        }
+        
+        await self.db.tc_pdf_imports.insert_one(doc)
+        
+        logger.info(f"[TC PDF] Stored: tc_pdf_id={tc_pdf_id}, path={storage_path}, size={file_size}")
         
         return storage_path, tc_pdf_id
     
     # --------------------------------------------------------
-    # MONGODB UPSERT
+    # REFERENCE INSERTION
     # --------------------------------------------------------
     
-    async def upsert_references(
+    async def insert_references(
         self,
         references: List[ExtractedReference],
         aircraft_id: str,
         user_id: str,
-        filename: str,
-        pdf_storage_path: str = None,
-        tc_pdf_id: str = None
-    ) -> Tuple[int, int, int]:
+        tc_pdf_id: str
+    ) -> Tuple[int, int]:
         """
-        Upsert extracted references into MongoDB.
+        Insert extracted references into tc_imported_references.
         
-        Uses ref as unique key. Does NOT overwrite existing data
-        from other sources - only updates if source is TC_PDF_IMPORT.
+        Skips duplicates (same aircraft_id + identifier).
         
-        Args:
-            references: List of extracted references
-            aircraft_id: Aircraft ID for context
-            user_id: User performing import
-            filename: Original filename for audit
-            pdf_storage_path: Path to stored PDF file
-            tc_pdf_id: Unique PDF identifier
-            
         Returns:
-            Tuple of (inserted, updated, skipped)
+            Tuple[int, int]: (inserted_count, skipped_count)
         """
         inserted = 0
-        updated = 0
         skipped = 0
-        
         now = datetime.now(timezone.utc)
         
         for ref_data in references:
-            collection = self.db.tc_ad if ref_data.type == "AD" else self.db.tc_sb
-            
-            # Check if exists
-            existing = await collection.find_one({"ref": ref_data.ref})
+            # Check for existing reference (same aircraft + identifier)
+            existing = await self.db.tc_imported_references.find_one({
+                "aircraft_id": aircraft_id,
+                "identifier": ref_data.ref.upper()
+            })
             
             if existing:
-                # Only update if source is TC_PDF_IMPORT (don't overwrite authoritative data)
-                existing_source = existing.get("source")
-                
-                if existing_source == ImportSource.TC_PDF_IMPORT.value or existing_source is None:
-                    # Safe to update
-                    update_data = {
-                        "source": ImportSource.TC_PDF_IMPORT.value,
-                        "scope": ref_data.scope.value,
-                        "updated_at": now,
-                        "import_filename": filename,
-                        "import_user": user_id,
-                        "import_aircraft_id": aircraft_id,
-                    }
-                    
-                    # Add PDF identifiers if available
-                    if pdf_storage_path:
-                        update_data["pdf_storage_path"] = pdf_storage_path
-                    if tc_pdf_id:
-                        update_data["tc_pdf_id"] = tc_pdf_id
-                    
-                    # Only update title if we found one and existing is empty
-                    if ref_data.title and not existing.get("title"):
-                        update_data["title"] = ref_data.title
-                    
-                    await collection.update_one(
-                        {"ref": ref_data.ref},
-                        {"$set": update_data}
-                    )
-                    updated += 1
-                    logger.debug(f"Updated {ref_data.type} {ref_data.ref}")
-                else:
-                    # Don't overwrite authoritative sources
-                    skipped += 1
-                    logger.debug(f"Skipped {ref_data.type} {ref_data.ref} (source={existing_source})")
-            else:
-                # Insert new
-                # Generate real MongoDB ObjectId
-                from bson import ObjectId
-                doc_id = ObjectId()
-                
-                doc = {
-                    "_id": doc_id,  # Real MongoDB ObjectId
-                    "ref": ref_data.ref,  # Business identifier (CF-xxx)
-                    "type": ref_data.type,
-                    "title": ref_data.title,
-                    "scope": ref_data.scope.value,
-                    "source": ImportSource.TC_PDF_IMPORT.value,
-                    "is_active": True,
-                    "created_at": now,
-                    "updated_at": now,
-                    "import_filename": filename,
-                    "import_user": user_id,
-                    "import_aircraft_id": aircraft_id,
-                }
-                
-                # Add PDF identifiers if available
-                if pdf_storage_path:
-                    doc["pdf_storage_path"] = pdf_storage_path
-                if tc_pdf_id:
-                    doc["tc_pdf_id"] = tc_pdf_id
-                
-                # Add manufacturer/model if provided
-                if ref_data.manufacturer:
-                    doc["manufacturer"] = ref_data.manufacturer
-                if ref_data.model:
-                    doc["model"] = ref_data.model
-                
-                try:
-                    await collection.insert_one(doc)
-                    inserted += 1
-                    logger.info(f"Inserted {ref_data.type} {ref_data.ref} _id={doc_id} tc_pdf_id={tc_pdf_id}")
-                except Exception as e:
-                    # Duplicate key - race condition, skip
-                    logger.warning(f"Insert failed for {ref_data.ref}: {e}")
-                    skipped += 1
+                skipped += 1
+                logger.debug(f"Skipped duplicate: {ref_data.ref} for aircraft {aircraft_id}")
+                continue
+            
+            # Insert new reference
+            doc = {
+                "aircraft_id": aircraft_id,
+                "identifier": ref_data.ref.upper(),
+                "type": ref_data.type,
+                "title": ref_data.title,
+                "tc_pdf_id": tc_pdf_id,
+                "source": "TC_PDF_IMPORT",
+                "scope": ref_data.scope.value if ref_data.scope else None,
+                "created_by": user_id,
+                "created_at": now
+            }
+            
+            try:
+                result = await self.db.tc_imported_references.insert_one(doc)
+                inserted += 1
+                logger.info(f"[TC PDF] Inserted reference: _id={result.inserted_id}, identifier={ref_data.ref}")
+            except Exception as e:
+                skipped += 1
+                logger.warning(f"Insert failed for {ref_data.ref}: {e}")
         
-        return inserted, updated, skipped
+        return inserted, skipped
     
     # --------------------------------------------------------
     # AUDIT LOGGING
@@ -428,26 +356,22 @@ class TCPDFImportService:
         aircraft_id: str,
         user_id: str,
         filename: str,
+        tc_pdf_id: str,
         pages_processed: int,
         references_found: int,
         references_inserted: int,
-        references_updated: int,
         errors: List[str] = None
     ):
-        """
-        Log import event to audit collection.
-        
-        TC-SAFE: Full traceability of all imports.
-        """
+        """Log import event to audit collection."""
         doc = {
             "event_type": "TC_PDF_IMPORT",
             "aircraft_id": aircraft_id,
             "user_id": user_id,
             "filename": filename,
+            "tc_pdf_id": tc_pdf_id,
             "pages_processed": pages_processed,
             "references_found": references_found,
             "references_inserted": references_inserted,
-            "references_updated": references_updated,
             "source": ImportSource.TC_PDF_IMPORT.value,
             "errors": errors or [],
             "created_at": datetime.now(timezone.utc),
@@ -455,9 +379,7 @@ class TCPDFImportService:
         
         try:
             await self.db.tc_adsb_audit_log.insert_one(doc)
-            logger.info(f"Audit log: TC_PDF_IMPORT | aircraft={aircraft_id} | refs={references_found}")
         except Exception as e:
-            # Never fail import due to audit error
             logger.error(f"Failed to write audit log: {e}")
     
     # --------------------------------------------------------
@@ -474,12 +396,13 @@ class TCPDFImportService:
         """
         Main method to import AD/SB references from TC PDF.
         
-        Args:
-            pdf_bytes: PDF file content
-            filename: Original filename
-            aircraft_id: Aircraft context
-            user_id: User performing import
-            
+        Process:
+        1. Extract text from PDF
+        2. Find AD/SB reference patterns
+        3. Store PDF file + create tc_pdf_imports record
+        4. Create tc_imported_references for each ref
+        5. Audit log
+        
         Returns:
             PDFImportResult with summary
         """
@@ -496,7 +419,6 @@ class TCPDFImportService:
                     pages_processed=page_count,
                     references_found=0,
                     references_inserted=0,
-                    references_updated=0,
                     references_skipped=0,
                     errors=["PDF contains no extractable text"],
                 )
@@ -511,26 +433,22 @@ class TCPDFImportService:
                     pages_processed=page_count,
                     references_found=0,
                     references_inserted=0,
-                    references_updated=0,
                     references_skipped=0,
                     errors=["No AD/SB references found in PDF"],
                 )
             
-            # Step 3: Store PDF file (returns path and tc_pdf_id)
-            pdf_storage_path, tc_pdf_id = await self.store_pdf_file(
+            # Step 3: Store PDF file
+            storage_path, tc_pdf_id = await self.store_pdf_file(
                 pdf_bytes=pdf_bytes,
                 filename=filename,
-                aircraft_id=aircraft_id,
                 user_id=user_id
             )
             
-            # Step 4: Upsert to MongoDB with tc_pdf_id
-            inserted, updated, skipped = await self.upsert_references(
+            # Step 4: Insert references into tc_imported_references
+            inserted, skipped = await self.insert_references(
                 references=references,
                 aircraft_id=aircraft_id,
                 user_id=user_id,
-                filename=filename,
-                pdf_storage_path=pdf_storage_path,
                 tc_pdf_id=tc_pdf_id
             )
             
@@ -539,10 +457,10 @@ class TCPDFImportService:
                 aircraft_id=aircraft_id,
                 user_id=user_id,
                 filename=filename,
+                tc_pdf_id=tc_pdf_id,
                 pages_processed=page_count,
                 references_found=len(references),
                 references_inserted=inserted,
-                references_updated=updated,
                 errors=errors
             )
             
@@ -552,8 +470,8 @@ class TCPDFImportService:
                 pages_processed=page_count,
                 references_found=len(references),
                 references_inserted=inserted,
-                references_updated=updated,
                 references_skipped=skipped,
+                tc_pdf_id=tc_pdf_id,
                 references=references,
             )
             
@@ -565,7 +483,6 @@ class TCPDFImportService:
                 pages_processed=0,
                 references_found=0,
                 references_inserted=0,
-                references_updated=0,
                 references_skipped=0,
                 errors=errors,
             )
@@ -578,7 +495,6 @@ class TCPDFImportService:
                 pages_processed=0,
                 references_found=0,
                 references_inserted=0,
-                references_updated=0,
                 references_skipped=0,
                 errors=errors,
             )
