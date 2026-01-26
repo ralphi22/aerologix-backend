@@ -1,7 +1,7 @@
 """
-TC PDF Import Routes (V2)
+TC PDF Import Routes (V3)
 
-Endpoints pour importer des AD/SB depuis des PDF Transport Canada.
+Endpoints pour importer des AD depuis des PDF Transport Canada.
 Utilise les collections dédiées: tc_pdf_imports et tc_imported_references.
 
 TC-SAFE:
@@ -25,12 +25,7 @@ import logging
 
 from database.mongodb import get_database
 from services.auth_deps import get_current_user
-from services.tc_pdf_import_service import (
-    TCPDFImportService,
-    PDFImportResult,
-    ImportSource,
-    ADSBScope,
-)
+from services.tc_pdf_import_service import TCPDFImportService
 from models.user import User
 
 logger = logging.getLogger(__name__)
@@ -43,34 +38,18 @@ router = APIRouter(prefix="/api/adsb/tc", tags=["tc-import"])
 # ============================================================
 
 class ImportResponse(BaseModel):
-    """Response for TC PDF import"""
-    success: bool
-    message: str
+    """Response for TC PDF import - D) Réponse API"""
+    tc_pdf_id: str
     filename: str
-    pages_processed: int
-    references_found: int
-    references_inserted: int
-    references_skipped: int
-    tc_pdf_id: Optional[str] = None
-    references: list = Field(default_factory=list)
-    errors: list = Field(default_factory=list)
-    source: str = ImportSource.TC_PDF_IMPORT.value
-    disclaimer: str = (
-        "This import is for INFORMATIONAL PURPOSES ONLY. "
-        "Imported references are not validated against Transport Canada. "
-        "All airworthiness decisions must be made by a licensed AME/TEA."
-    )
+    imported_references_count: int
 
 
 class ImportedReferenceItem(BaseModel):
     """Single imported reference in list response"""
     tc_reference_id: str = Field(..., description="MongoDB ObjectId - use for DELETE")
-    identifier: str = Field(..., description="TC reference (e.g., CF-2024-01) - display only")
+    identifier: str = Field(..., description="TC reference (e.g., CF-2024-01)")
     type: str
-    title: Optional[str] = None
     tc_pdf_id: str = Field(..., description="UUID - use for GET PDF")
-    source: str = "TC_PDF_IMPORT"
-    scope: Optional[str] = None
     created_at: str
 
 
@@ -84,13 +63,9 @@ class ImportedReferencesResponse(BaseModel):
 class DeleteReferenceResponse(BaseModel):
     """Response for DELETE reference"""
     ok: bool
-    success: bool
-    message: str
     tc_reference_id: str
     identifier: str
-    type: str
-    pdf_deleted: bool
-    deleted_count: int
+    deleted: bool
 
 
 # ============================================================
@@ -100,13 +75,13 @@ class DeleteReferenceResponse(BaseModel):
 @router.post(
     "/import-pdf/{aircraft_id}",
     response_model=ImportResponse,
-    summary="Import AD/SB references from TC PDF",
+    summary="Import AD references from TC PDF",
     description="""
     **TC PDF Import Endpoint**
     
-    Uploads a PDF, extracts AD/SB references, and stores them in:
-    - tc_pdf_imports: PDF file metadata
-    - tc_imported_references: Extracted references linked to aircraft
+    - Extracts only valid CF-XXXX-XX references (^CF-\\d{4}-\\d{2,4}$)
+    - Stores PDF in tc_pdf_imports
+    - Creates references in tc_imported_references
     
     **TC-SAFE:** Import only, no compliance decisions.
     """
@@ -114,12 +89,11 @@ class DeleteReferenceResponse(BaseModel):
 async def import_pdf_tc(
     aircraft_id: str,
     file: UploadFile = File(..., description="TC PDF document"),
-    scope: Optional[ADSBScope] = None,
     current_user: User = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """Import AD/SB references from a Transport Canada PDF document."""
-    logger.info(f"TC PDF Import | aircraft={aircraft_id} | user={current_user.id} | file={file.filename}")
+    """Import AD references from a Transport Canada PDF document."""
+    logger.info(f"[TC PDF IMPORT] aircraft={aircraft_id} user={current_user.id} file={file.filename}")
     
     # Validate aircraft ownership
     aircraft = await db.aircrafts.find_one({
@@ -150,7 +124,7 @@ async def import_pdf_tc(
     try:
         pdf_bytes = await file.read()
     except Exception as e:
-        logger.error(f"Failed to read uploaded file: {e}")
+        logger.error(f"[TC PDF IMPORT] Failed to read file: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to read uploaded file"
@@ -180,39 +154,23 @@ async def import_pdf_tc(
             user_id=current_user.id
         )
     except Exception as e:
-        logger.error(f"PDF import service failed: {e}")
+        logger.error(f"[TC PDF IMPORT] Service failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Import failed: {str(e)}"
         )
     
-    # Build response message
-    if result.success:
-        if result.references_found == 0:
-            message = "PDF processed successfully. No AD/SB references found."
-        else:
-            message = (
-                f"Import complete. Found {result.references_found} references: "
-                f"{result.references_inserted} inserted, "
-                f"{result.references_skipped} skipped."
-            )
-    else:
-        message = f"Import failed: {', '.join(result.errors)}"
+    if not result.success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.errors[0] if result.errors else "Import failed"
+        )
     
-    logger.info(f"TC PDF Import complete | {message}")
-    
+    # D) Response API
     return ImportResponse(
-        success=result.success,
-        message=message,
-        filename=result.filename,
-        pages_processed=result.pages_processed,
-        references_found=result.references_found,
-        references_inserted=result.references_inserted,
-        references_skipped=result.references_skipped,
         tc_pdf_id=result.tc_pdf_id,
-        references=[r.model_dump() for r in result.references],
-        errors=result.errors,
-        source=result.source,
+        filename=result.filename,
+        imported_references_count=result.imported_references_count
     )
 
 
@@ -223,8 +181,7 @@ async def import_pdf_tc(
 @router.get(
     "/references/{aircraft_id}",
     response_model=ImportedReferencesResponse,
-    summary="List imported TC references for aircraft",
-    description="Returns all user-imported AD/SB references for an aircraft."
+    summary="List imported TC references for aircraft"
 )
 async def list_imported_references(
     aircraft_id: str,
@@ -254,13 +211,10 @@ async def list_imported_references(
         created_at_str = created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at)
         
         references.append(ImportedReferenceItem(
-            tc_reference_id=str(doc["_id"]),  # ObjectId -> string
+            tc_reference_id=str(doc["_id"]),
             identifier=doc.get("identifier", ""),
             type=doc.get("type", "AD"),
-            title=doc.get("title"),
             tc_pdf_id=doc.get("tc_pdf_id", ""),
-            source=doc.get("source", "TC_PDF_IMPORT"),
-            scope=doc.get("scope"),
             created_at=created_at_str
         ))
     
@@ -277,12 +231,7 @@ async def list_imported_references(
 
 @router.get(
     "/pdf/{tc_pdf_id}",
-    summary="View imported TC PDF",
-    description="""
-    Stream the PDF file using its tc_pdf_id (UUID).
-    
-    **TC-SAFE:** Read-only, no compliance logic.
-    """
+    summary="View imported TC PDF"
 )
 async def view_tc_pdf(
     tc_pdf_id: str,
@@ -298,36 +247,26 @@ async def view_tc_pdf(
     if not pdf_doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="PDF not found. Invalid tc_pdf_id."
+            detail="PDF not found"
         )
     
-    # Verify user has access (check if any of their references use this PDF)
-    user_ref = await db.tc_imported_references.find_one({
-        "tc_pdf_id": tc_pdf_id,
-        "created_by": current_user.id
-    })
-    
-    if not user_ref:
-        # Also check via aircraft ownership
-        refs = await db.tc_imported_references.find({"tc_pdf_id": tc_pdf_id}).to_list(length=1)
-        if refs:
-            aircraft_id = refs[0].get("aircraft_id")
-            aircraft = await db.aircrafts.find_one({
-                "_id": aircraft_id,
-                "user_id": current_user.id
-            })
-            if not aircraft:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Not authorized to view this PDF"
-                )
-        else:
-            # PDF exists but no references - check if user imported it
-            if pdf_doc.get("imported_by") != current_user.id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Not authorized to view this PDF"
-                )
+    # Verify access via aircraft ownership
+    ref = await db.tc_imported_references.find_one({"tc_pdf_id": tc_pdf_id})
+    if ref:
+        aircraft = await db.aircrafts.find_one({
+            "_id": ref.get("aircraft_id"),
+            "user_id": current_user.id
+        })
+        if not aircraft:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized"
+            )
+    elif pdf_doc.get("imported_by") != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized"
+        )
     
     # Get storage path
     storage_path = pdf_doc.get("storage_path")
@@ -336,35 +275,20 @@ async def view_tc_pdf(
     if not storage_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="PDF file not found on server."
+            detail="PDF file not found"
         )
     
     full_path = f"/app/backend/{storage_path}"
     
     if not os.path.exists(full_path):
-        # Try pattern match
-        pattern = f"/app/backend/storage/tc_pdfs/{tc_pdf_id}_*"
-        matches = glob.glob(pattern)
-        if matches:
-            full_path = matches[0]
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="PDF file not found on disk."
-            )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="PDF file not found on disk"
+        )
     
     file_size = os.path.getsize(full_path)
     
-    # Audit log
-    await db.tc_adsb_audit_log.insert_one({
-        "event_type": "TC_PDF_VIEWED",
-        "tc_pdf_id": tc_pdf_id,
-        "user_id": current_user.id,
-        "filename": filename,
-        "created_at": datetime.now(timezone.utc)
-    })
-    
-    logger.info(f"[TC PDF VIEW] tc_pdf_id={tc_pdf_id} ({file_size} bytes)")
+    logger.info(f"[TC PDF VIEW] tc_pdf_id={tc_pdf_id} size={file_size}")
     
     return FileResponse(
         path=full_path,
@@ -372,8 +296,7 @@ async def view_tc_pdf(
         filename=filename,
         headers={
             "Content-Disposition": f'inline; filename="{filename}"',
-            "Content-Length": str(file_size),
-            "Cache-Control": "private, max-age=3600"
+            "Content-Length": str(file_size)
         }
     )
 
@@ -385,14 +308,7 @@ async def view_tc_pdf(
 @router.delete(
     "/reference-by-id/{tc_reference_id}",
     response_model=DeleteReferenceResponse,
-    summary="Delete imported TC reference by ID",
-    description="""
-    Delete a user-imported AD/SB reference by its tc_reference_id (MongoDB ObjectId).
-    
-    If this is the last reference using a PDF, the PDF file is also deleted.
-    
-    **TC-SAFE:** Does not affect canonical TC data.
-    """
+    summary="Delete imported TC reference by ID"
 )
 async def delete_tc_reference_by_id(
     tc_reference_id: str,
@@ -408,50 +324,40 @@ async def delete_tc_reference_by_id(
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid tc_reference_id format. Expected 24-character hex string."
+            detail="Invalid tc_reference_id format"
         )
     
-    # Find reference in tc_imported_references
+    # Find reference
     reference = await db.tc_imported_references.find_one({"_id": obj_id})
     
     if not reference:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reference not found."
+            detail="Reference not found"
         )
     
     # Verify ownership via aircraft
     aircraft_id = reference.get("aircraft_id")
-    if aircraft_id:
-        aircraft = await db.aircrafts.find_one({
-            "_id": aircraft_id,
-            "user_id": current_user.id
-        })
-        
-        if not aircraft:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to delete this reference"
-            )
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized"
+        )
     
     identifier = reference.get("identifier", "")
-    ref_type = reference.get("type", "AD")
     tc_pdf_id = reference.get("tc_pdf_id")
     
     # Delete the reference
     result = await db.tc_imported_references.delete_one({"_id": obj_id})
     
-    if result.deleted_count == 0:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete reference"
-        )
-    
-    # Check if PDF is orphaned (no more references)
-    pdf_deleted = False
+    # Check if PDF is orphaned
     if tc_pdf_id:
         remaining = await db.tc_imported_references.count_documents({"tc_pdf_id": tc_pdf_id})
-        
         if remaining == 0:
             # Delete orphaned PDF
             pdf_doc = await db.tc_pdf_imports.find_one({"tc_pdf_id": tc_pdf_id})
@@ -462,36 +368,19 @@ async def delete_tc_reference_by_id(
                     if os.path.exists(full_path):
                         try:
                             os.remove(full_path)
-                            pdf_deleted = True
-                            logger.info(f"[TC PDF DELETE] Deleted orphan PDF: {storage_path}")
+                            logger.info(f"[TC PDF DELETE] Orphan PDF deleted: {tc_pdf_id}")
                         except Exception as e:
                             logger.warning(f"[TC PDF DELETE] Failed to delete file: {e}")
                 
-                # Delete tc_pdf_imports document
                 await db.tc_pdf_imports.delete_one({"tc_pdf_id": tc_pdf_id})
     
-    # Audit log
-    await db.tc_adsb_audit_log.insert_one({
-        "event_type": "TC_REFERENCE_DELETED",
-        "tc_reference_id": tc_reference_id,
-        "identifier": identifier,
-        "aircraft_id": aircraft_id,
-        "user_id": current_user.id,
-        "pdf_deleted": pdf_deleted,
-        "created_at": datetime.now(timezone.utc)
-    })
-    
-    logger.info(f"[TC PDF DELETE] tc_reference_id={tc_reference_id} identifier={identifier} pdf_deleted={pdf_deleted}")
+    logger.info(f"[TC PDF DELETE] tc_reference_id={tc_reference_id} identifier={identifier}")
     
     return DeleteReferenceResponse(
         ok=True,
-        success=True,
-        message=f"Reference {identifier} deleted successfully",
         tc_reference_id=tc_reference_id,
         identifier=identifier,
-        type=ref_type,
-        pdf_deleted=pdf_deleted,
-        deleted_count=1
+        deleted=result.deleted_count > 0
     )
 
 
@@ -501,8 +390,7 @@ async def delete_tc_reference_by_id(
 
 @router.get(
     "/import-history/{aircraft_id}",
-    summary="Get TC PDF import history",
-    description="Returns audit log of TC PDF imports for an aircraft."
+    summary="Get TC PDF import history"
 )
 async def get_import_history(
     aircraft_id: str,
@@ -523,24 +411,18 @@ async def get_import_history(
             detail="Aircraft not found or not authorized"
         )
     
-    # Query audit log
     cursor = db.tc_adsb_audit_log.find(
-        {
-            "aircraft_id": aircraft_id,
-            "event_type": "TC_PDF_IMPORT"
-        },
+        {"aircraft_id": aircraft_id, "event_type": "TC_PDF_IMPORT"},
         {"_id": 0}
     ).sort("created_at", -1).limit(limit)
     
     history = await cursor.to_list(length=limit)
     
-    # Format dates
     for entry in history:
         if "created_at" in entry and hasattr(entry["created_at"], "isoformat"):
             entry["created_at"] = entry["created_at"].isoformat()
     
     return {
         "aircraft_id": aircraft_id,
-        "total_imports": len(history),
         "history": history
     }
