@@ -167,8 +167,11 @@ class TCPDFImportService:
         return result
     
     # --------------------------------------------------------
-    # PDF STORAGE
+    # PDF STORAGE - Uses /tmp for Render compatibility
     # --------------------------------------------------------
+    
+    # A) Base directory for PDF storage (writable on Render)
+    PDF_STORAGE_DIR = "/tmp/tc_pdfs"
     
     async def store_pdf(
         self,
@@ -179,7 +182,7 @@ class TCPDFImportService:
         """
         Store PDF file and create tc_pdf_imports document.
         
-        Storage path: tc_pdfs/{tc_pdf_id}_{original_filename}
+        Storage: /tmp/tc_pdfs/{tc_pdf_id}_{original_filename}
         
         Returns:
             Tuple[str, str]: (tc_pdf_id, storage_path)
@@ -187,25 +190,31 @@ class TCPDFImportService:
         # A) Generate tc_pdf_id (UUID v4)
         tc_pdf_id = str(uuid.uuid4())
         
-        # B) Create storage path
+        # B) Create storage path in /tmp (writable on Render)
         safe_filename = "".join(c if c.isalnum() or c in ".-_" else "_" for c in filename)
-        storage_path = f"tc_pdfs/{tc_pdf_id}_{safe_filename}"
-        full_path = f"/app/backend/storage/{storage_path}"
+        storage_path = f"/tmp/tc_pdfs/{tc_pdf_id}_{safe_filename}"
         
         # Ensure directory exists
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        os.makedirs(self.PDF_STORAGE_DIR, exist_ok=True)
         
-        # Write file
-        with open(full_path, "wb") as f:
+        # C) Write file
+        with open(storage_path, "wb") as f:
             f.write(pdf_bytes)
         
         file_size = len(pdf_bytes)
         
-        # C) Create tc_pdf_imports document
+        # Verify file exists
+        if not os.path.exists(storage_path):
+            raise ValueError(f"Failed to write PDF to {storage_path}")
+        
+        # Log storage
+        logger.info(f"[TC PDF STORE] path={storage_path} size={file_size}")
+        
+        # D) Create tc_pdf_imports document with EXACT storage_path
         pdf_doc = {
             "tc_pdf_id": tc_pdf_id,
             "filename": filename,
-            "storage_path": f"storage/{storage_path}",
+            "storage_path": storage_path,  # Exact path as stored
             "content_type": "application/pdf",
             "file_size_bytes": file_size,
             "source": "TRANSPORT_CANADA",
@@ -215,9 +224,9 @@ class TCPDFImportService:
         
         await self.db.tc_pdf_imports.insert_one(pdf_doc)
         
-        logger.info(f"[TC PDF IMPORT] PDF stored: tc_pdf_id={tc_pdf_id} path={storage_path} size={file_size}")
+        logger.info(f"[TC PDF IMPORT] tc_pdf_id={tc_pdf_id}")
         
-        return tc_pdf_id, f"storage/{storage_path}"
+        return tc_pdf_id, storage_path
     
     # --------------------------------------------------------
     # REFERENCE CREATION
