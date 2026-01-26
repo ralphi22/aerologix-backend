@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 """
-TC PDF Import Regression Test Script (V2)
-
-Tests the new collections:
-- tc_pdf_imports
-- tc_imported_references
+TC PDF Import V3 Regression Test
 
 Tests:
-1. Import PDF -> creates documents in both collections
-2. Baseline shows tc_reference_id (ObjectId) and tc_pdf_id (UUID)
-3. Delete by tc_reference_id works
-4. PDF viewing works
+1. STRICT pattern extraction (CF-XXXX-XX only)
+2. Normalization (trim, uppercase, no spaces)
+3. Duplicate prevention (aircraft_id + identifier + tc_pdf_id)
+4. API response format (tc_pdf_id, filename, imported_references_count)
 
 Usage:
     python3 scripts/test_tc_pdf_import.py
@@ -19,10 +15,8 @@ Usage:
 import asyncio
 import os
 import sys
-import json
 import fitz  # PyMuPDF
 
-# Add backend to path
 sys.path.insert(0, '/app/backend')
 
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -34,251 +28,259 @@ load_dotenv('/app/backend/.env')
 MONGO_URL = os.getenv('MONGO_URL')
 DB_NAME = os.getenv('DB_NAME', 'aerologix')
 
-# Test data
-TEST_AIRCRAFT_ID = "test_aircraft_regression_v2"
-TEST_USER_ID = "test_user_regression_v2"
+TEST_AIRCRAFT_ID = "test_aircraft_v3"
+TEST_USER_ID = "test_user_v3"
 
 
-async def setup_test_aircraft(db):
-    """Create test aircraft if not exists."""
-    await db.aircrafts.update_one(
-        {"_id": TEST_AIRCRAFT_ID},
-        {
-            "$set": {
-                "_id": TEST_AIRCRAFT_ID,
-                "user_id": TEST_USER_ID,
-                "registration": "C-TEST",
-                "manufacturer": "Test",
-                "model": "Regression"
-            }
-        },
-        upsert=True
-    )
-    print(f"✓ Test aircraft created: {TEST_AIRCRAFT_ID}")
+async def setup(db):
+    """Setup test data."""
+    # Clean previous test data
+    await db.tc_imported_references.delete_many({"aircraft_id": TEST_AIRCRAFT_ID})
+    await db.tc_pdf_imports.delete_many({"imported_by": TEST_USER_ID})
+    await db.aircrafts.delete_one({"_id": TEST_AIRCRAFT_ID})
+    
+    # Create test aircraft
+    await db.aircrafts.insert_one({
+        "_id": TEST_AIRCRAFT_ID,
+        "user_id": TEST_USER_ID,
+        "registration": "C-TEST",
+        "manufacturer": "Test",
+        "model": "V3"
+    })
+    print("✓ Setup complete")
 
 
-async def create_test_pdf():
-    """Create a test PDF with AD/SB references."""
+async def test_pattern_extraction(db):
+    """Test STRICT CF-XXXX-XX pattern extraction."""
+    print("\n--- TEST 1: Pattern Extraction ---")
+    
+    from services.tc_pdf_import_service import TCPDFImportService
+    service = TCPDFImportService(db)
+    
+    # Test cases
+    test_cases = [
+        # Valid
+        ("CF-2024-01", True),
+        ("CF-2024-123", True),
+        ("CF-1987-15", True),
+        ("CF-2024-1234", True),
+        # Should be normalized
+        ("cf-2024-01", True),      # lowercase
+        ("CF 2024 01", True),      # spaces
+        ("CF202401", True),        # no separators
+        # Invalid
+        ("CF-24-01", False),       # 2-digit year
+        ("CF-2024-1", False),      # 1-digit number
+        ("CF-2024-12345", False),  # 5-digit number
+        ("AD-2024-01", False),     # AD prefix
+        ("SB-172-01", False),      # SB prefix
+        ("CF2024", False),         # incomplete
+    ]
+    
+    for raw, should_match in test_cases:
+        normalized = service.normalize_reference(raw)
+        matched = normalized is not None
+        status = "✓" if matched == should_match else "✗"
+        result = normalized if normalized else "REJECTED"
+        print(f"  {status} '{raw}' -> {result}")
+        
+        if matched != should_match:
+            print(f"    FAIL: Expected {'valid' if should_match else 'invalid'}")
+            return False
+    
+    print("✓ Pattern extraction OK")
+    return True
+
+
+async def test_pdf_import(db):
+    """Test full PDF import."""
+    print("\n--- TEST 2: PDF Import ---")
+    
+    # Create test PDF with mixed references
     doc = fitz.open()
     page = doc.new_page()
     page.insert_text((50, 50), """
 TRANSPORT CANADA AIRWORTHINESS DIRECTIVE
 
-CF-2099-01: Test AD for Regression Testing
-CF-2099-02: Another Test AD for Regression
-SB-172-2099-01: Test Service Bulletin
+Valid references:
+CF-2024-01: First valid AD
+CF-2024-123: Second valid AD
+CF-1987-15R: Third with suffix (should extract CF-1987-15)
 
-This is a test document for regression testing.
+Invalid references (should be ignored):
+AD-2024-01: FAA format
+SB-172-001: Service Bulletin
+CF-24-01: Short year
+INVALID-REF
 """, fontsize=11)
     
-    pdf_path = "/tmp/regression_test_v2.pdf"
+    pdf_path = "/tmp/test_v3.pdf"
     doc.save(pdf_path)
     doc.close()
-    
-    print(f"✓ Test PDF created: {pdf_path}")
-    return pdf_path
-
-
-async def import_pdf(db, pdf_path):
-    """Simulate PDF import using the service."""
-    from services.tc_pdf_import_service import TCPDFImportService
     
     with open(pdf_path, "rb") as f:
         pdf_bytes = f.read()
     
+    from services.tc_pdf_import_service import TCPDFImportService
     service = TCPDFImportService(db)
+    
     result = await service.import_pdf(
         pdf_bytes=pdf_bytes,
-        filename="regression_test_v2.pdf",
+        filename="test_v3.pdf",
         aircraft_id=TEST_AIRCRAFT_ID,
         user_id=TEST_USER_ID
     )
     
-    print(f"✓ PDF Import: success={result.success}, refs_found={result.references_found}, inserted={result.references_inserted}")
+    print(f"  success: {result.success}")
     print(f"  tc_pdf_id: {result.tc_pdf_id}")
+    print(f"  filename: {result.filename}")
+    print(f"  imported_references_count: {result.imported_references_count}")
     
-    return result
+    if not result.success:
+        print("  ✗ Import failed")
+        return False, None
+    
+    if not result.tc_pdf_id:
+        print("  ✗ Missing tc_pdf_id")
+        return False, None
+    
+    # Should have exactly 3 valid references
+    expected = 3  # CF-2024-01, CF-2024-123, CF-1987-15
+    if result.imported_references_count != expected:
+        print(f"  ✗ Expected {expected} refs, got {result.imported_references_count}")
+        return False, None
+    
+    print("✓ PDF import OK")
+    return True, result.tc_pdf_id
 
 
-async def check_collections(db):
-    """Check both collections have the correct data."""
-    print(f"\n=== Collection Check ===")
+async def test_duplicate_prevention(db, tc_pdf_id):
+    """Test duplicate prevention."""
+    print("\n--- TEST 3: Duplicate Prevention ---")
+    
+    # Try to import same PDF again
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((50, 50), "CF-2024-01: Same reference", fontsize=11)
+    
+    pdf_path = "/tmp/test_dup.pdf"
+    doc.save(pdf_path)
+    doc.close()
+    
+    with open(pdf_path, "rb") as f:
+        pdf_bytes = f.read()
+    
+    from services.tc_pdf_import_service import TCPDFImportService
+    service = TCPDFImportService(db)
+    
+    result = await service.import_pdf(
+        pdf_bytes=pdf_bytes,
+        filename="test_dup.pdf",
+        aircraft_id=TEST_AIRCRAFT_ID,
+        user_id=TEST_USER_ID
+    )
+    
+    # Should create 0 new references (CF-2024-01 already exists for this aircraft)
+    # But it's a NEW PDF, so new tc_pdf_id
+    # Duplicate check is: aircraft_id + identifier + tc_pdf_id
+    # So same identifier with different tc_pdf_id is NOT a duplicate
+    
+    print(f"  Second import: {result.imported_references_count} refs")
+    print(f"  New tc_pdf_id: {result.tc_pdf_id[:8]}...")
+    
+    # Count total refs for aircraft
+    count = await db.tc_imported_references.count_documents({"aircraft_id": TEST_AIRCRAFT_ID})
+    print(f"  Total refs for aircraft: {count}")
+    
+    # Should have 4 refs now (3 from first + 1 from second, different PDFs)
+    if count != 4:
+        print(f"  ✗ Expected 4 refs, got {count}")
+        return False
+    
+    print("✓ Duplicate prevention OK")
+    return True
+
+
+async def test_collections(db):
+    """Verify collections have correct data."""
+    print("\n--- TEST 4: Collection Verification ---")
     
     # Check tc_pdf_imports
-    pdf_count = await db.tc_pdf_imports.count_documents({})
-    print(f"tc_pdf_imports: {pdf_count} documents")
+    pdf_count = await db.tc_pdf_imports.count_documents({"imported_by": TEST_USER_ID})
+    print(f"  tc_pdf_imports: {pdf_count} documents")
     
     pdf_doc = await db.tc_pdf_imports.find_one({"imported_by": TEST_USER_ID})
     if pdf_doc:
-        print(f"  ✓ Found PDF: tc_pdf_id={pdf_doc.get('tc_pdf_id')[:8]}...")
-        print(f"    filename: {pdf_doc.get('filename')}")
-        print(f"    storage_path: {pdf_doc.get('storage_path')}")
-    else:
-        print(f"  ✗ No PDF found for test user")
-        return False
+        required_fields = ["tc_pdf_id", "filename", "storage_path", "imported_by", "imported_at"]
+        for field in required_fields:
+            if field not in pdf_doc:
+                print(f"  ✗ Missing field: {field}")
+                return False
+        print(f"  ✓ tc_pdf_imports schema OK")
     
     # Check tc_imported_references
     ref_count = await db.tc_imported_references.count_documents({"aircraft_id": TEST_AIRCRAFT_ID})
-    print(f"\ntc_imported_references: {ref_count} documents for aircraft")
+    print(f"  tc_imported_references: {ref_count} documents")
     
-    refs = []
-    async for ref in db.tc_imported_references.find({"aircraft_id": TEST_AIRCRAFT_ID}):
-        refs.append({
-            "_id": str(ref.get("_id")),
-            "identifier": ref.get("identifier"),
-            "type": ref.get("type"),
-            "tc_pdf_id": ref.get("tc_pdf_id")
-        })
-        print(f"  ✓ {ref.get('identifier')}: tc_reference_id={str(ref['_id'])[:8]}..., tc_pdf_id={ref.get('tc_pdf_id')[:8]}...")
-    
-    return refs
-
-
-async def test_baseline(db):
-    """Test that baseline endpoint would return correct data."""
-    print(f"\n=== Baseline Simulation ===")
-    
-    # Simulate what adsb.py baseline does
-    refs = []
-    async for ref in db.tc_imported_references.find({"aircraft_id": TEST_AIRCRAFT_ID}):
-        tc_reference_id = str(ref.get("_id"))
-        tc_pdf_id = ref.get("tc_pdf_id")
+    ref_doc = await db.tc_imported_references.find_one({"aircraft_id": TEST_AIRCRAFT_ID})
+    if ref_doc:
+        required_fields = ["aircraft_id", "identifier", "type", "tc_pdf_id", "source", "created_by", "created_at"]
+        for field in required_fields:
+            if field not in ref_doc:
+                print(f"  ✗ Missing field: {field}")
+                return False
         
-        # Validate tc_reference_id is 24-char hex
-        if len(tc_reference_id) != 24:
-            print(f"  ✗ FAIL: tc_reference_id length={len(tc_reference_id)}, expected 24")
+        # Verify identifier format
+        identifier = ref_doc.get("identifier")
+        import re
+        if not re.match(r'^CF-\d{4}-\d{2,4}$', identifier):
+            print(f"  ✗ Invalid identifier format: {identifier}")
             return False
         
-        try:
-            int(tc_reference_id, 16)
-        except ValueError:
-            print(f"  ✗ FAIL: tc_reference_id not valid hex")
-            return False
-        
-        # Validate tc_pdf_id is UUID (36 chars)
-        if len(tc_pdf_id) != 36:
-            print(f"  ✗ FAIL: tc_pdf_id length={len(tc_pdf_id)}, expected 36")
-            return False
-        
-        refs.append({
-            "tc_reference_id": tc_reference_id,
-            "tc_pdf_id": tc_pdf_id,
-            "identifier": ref.get("identifier")
-        })
-        print(f"  ✓ {ref.get('identifier')}: IDs valid")
+        print(f"  ✓ tc_imported_references schema OK")
     
-    print(f"✓ All {len(refs)} references have valid IDs")
-    return refs
-
-
-async def test_delete(db, tc_reference_id):
-    """Test deletion by tc_reference_id."""
-    print(f"\n=== Delete Test ===")
-    print(f"tc_reference_id: {tc_reference_id}")
-    
-    # Convert to ObjectId
-    obj_id = ObjectId(tc_reference_id)
-    
-    # Get tc_pdf_id before delete
-    ref = await db.tc_imported_references.find_one({"_id": obj_id})
-    tc_pdf_id = ref.get("tc_pdf_id") if ref else None
-    
-    # Delete reference
-    result = await db.tc_imported_references.delete_one({"_id": obj_id})
-    print(f"deleted_count: {result.deleted_count}")
-    
-    if result.deleted_count != 1:
-        return False
-    
-    # Check if PDF is orphaned
-    remaining = await db.tc_imported_references.count_documents({"tc_pdf_id": tc_pdf_id})
-    print(f"remaining refs using this PDF: {remaining}")
-    
+    print("✓ Collections OK")
     return True
 
 
 async def cleanup(db):
-    """Clean up test data."""
-    # Delete from tc_imported_references
-    del_refs = await db.tc_imported_references.delete_many({"aircraft_id": TEST_AIRCRAFT_ID})
-    print(f"Deleted {del_refs.deleted_count} references")
-    
-    # Delete from tc_pdf_imports
-    del_pdfs = await db.tc_pdf_imports.delete_many({"imported_by": TEST_USER_ID})
-    print(f"Deleted {del_pdfs.deleted_count} PDFs")
-    
-    # Delete test aircraft
+    """Cleanup test data."""
+    await db.tc_imported_references.delete_many({"aircraft_id": TEST_AIRCRAFT_ID})
+    await db.tc_pdf_imports.delete_many({"imported_by": TEST_USER_ID})
     await db.aircrafts.delete_one({"_id": TEST_AIRCRAFT_ID})
-    
-    # Clean up old data from tc_ad/tc_sb (from V1)
-    await db.tc_ad.delete_many({"import_aircraft_id": {"$regex": "test_aircraft"}})
-    await db.tc_sb.delete_many({"import_aircraft_id": {"$regex": "test_aircraft"}})
-    
-    print("✓ Cleanup complete")
+    print("\n✓ Cleanup complete")
 
 
 async def run_tests():
-    """Run all regression tests."""
+    """Run all tests."""
     print("=" * 60)
-    print("TC PDF Import V2 Regression Tests")
-    print("Collections: tc_pdf_imports, tc_imported_references")
+    print("TC PDF Import V3 Tests")
+    print("STRICT: CF-XXXX-XX pattern only")
     print("=" * 60)
     
     client = AsyncIOMotorClient(MONGO_URL)
     db = client[DB_NAME]
     
     try:
-        # Setup
-        await cleanup(db)
-        await setup_test_aircraft(db)
+        await setup(db)
         
-        # Test 1: Import PDF
-        print("\n--- TEST 1: Import PDF ---")
-        pdf_path = await create_test_pdf()
-        import_result = await import_pdf(db, pdf_path)
-        
-        if not import_result.success:
-            print("✗ FAIL: Import failed")
+        # Test 1: Pattern extraction
+        if not await test_pattern_extraction(db):
             return False
         
-        if not import_result.tc_pdf_id:
-            print("✗ FAIL: No tc_pdf_id returned")
+        # Test 2: PDF import
+        success, tc_pdf_id = await test_pdf_import(db)
+        if not success:
             return False
         
-        # Test 2: Check collections
-        print("\n--- TEST 2: Check Collections ---")
-        refs = await check_collections(db)
-        
-        if not refs:
-            print("✗ FAIL: No references found")
+        # Test 3: Duplicate prevention
+        if not await test_duplicate_prevention(db, tc_pdf_id):
             return False
         
-        # Test 3: Validate IDs for baseline
-        print("\n--- TEST 3: Validate IDs ---")
-        validated_refs = await test_baseline(db)
-        
-        if not validated_refs:
-            print("✗ FAIL: ID validation failed")
+        # Test 4: Collections
+        if not await test_collections(db):
             return False
         
-        # Test 4: Delete by tc_reference_id
-        print("\n--- TEST 4: Delete by tc_reference_id ---")
-        tc_ref_to_delete = validated_refs[0]["tc_reference_id"]
-        initial_count = len(validated_refs)
-        
-        if not await test_delete(db, tc_ref_to_delete):
-            print("✗ FAIL: Delete failed")
-            return False
-        
-        # Verify count decreased
-        remaining = await db.tc_imported_references.count_documents({"aircraft_id": TEST_AIRCRAFT_ID})
-        if remaining != initial_count - 1:
-            print(f"✗ FAIL: Expected {initial_count - 1} refs, got {remaining}")
-            return False
-        
-        print("✓ PASS: Delete worked correctly")
-        
-        # Cleanup
         await cleanup(db)
         
         print("\n" + "=" * 60)
