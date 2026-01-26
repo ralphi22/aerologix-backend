@@ -399,10 +399,10 @@ async def get_adsb_baseline(
             ))
     
     # ============================================================
-    # PATCH: ADD USER-IMPORTED AD/SB FROM TC_PDF_IMPORT
+    # PATCH: ADD USER-IMPORTED AD/SB FROM tc_imported_references
     # ============================================================
+    # V2: Reads from dedicated tc_imported_references collection
     # These are references imported manually by user via PDF upload.
-    # They are linked to this specific aircraft, not by type/model.
     # TC-SAFE: Marked as USER_IMPORTED_REFERENCE, not canonical TC data.
     
     existing_ad_refs = {item.identifier for item in ad_list}
@@ -410,31 +410,21 @@ async def get_adsb_baseline(
     
     user_imported_ad_count = 0
     user_imported_sb_count = 0
-    ghost_ad_filtered = 0
-    ghost_sb_filtered = 0
     
-    # Query AD imported for this specific aircraft via PDF
-    async for ad in db.tc_ad.find({
-        "source": "TC_PDF_IMPORT",
-        "import_aircraft_id": aircraft_id,
-        "is_active": True
-    }):
-        identifier = ad.get("ref", "")
+    # Query tc_imported_references for this aircraft
+    async for ref in db.tc_imported_references.find({"aircraft_id": aircraft_id}):
+        identifier = ref.get("identifier", "")
+        ref_type = ref.get("type", "AD")
         
-        # Skip if already in canonical baseline (union by ref)
-        if identifier in existing_ad_refs:
+        # Skip if already in canonical baseline (union by identifier)
+        if ref_type == "AD" and identifier in existing_ad_refs:
             continue
-        
-        # FILTER GHOST ADs: Must have valid import metadata
-        import_filename = ad.get("import_filename") or ad.get("last_import_filename")
-        if not import_filename:
-            ghost_ad_filtered += 1
-            logger.debug(f"[AD/SB BASELINE] Filtered ghost AD: {identifier} (no import_filename)")
+        if ref_type == "SB" and identifier in existing_sb_refs:
             continue
         
         norm_id = service._normalize_identifier(identifier)
         
-        # Count OCR occurrences (same logic as canonical)
+        # Count OCR occurrences
         count_seen = 0
         all_dates = []
         for ocr_ref, dates in ocr_references.items():
@@ -445,111 +435,52 @@ async def get_adsb_baseline(
         sorted_dates = sorted(set(all_dates), reverse=True)
         last_seen = sorted_dates[0] if sorted_dates else None
         
-        eff_date = ad.get("effective_date")
-        eff_str = eff_date.strftime("%Y-%m-%d") if hasattr(eff_date, 'strftime') else str(eff_date)[:10] if eff_date else None
-        
-        # Get stable IDs for USER_IMPORTED_REFERENCE
-        # tc_reference_id = MongoDB _id (for DELETE)
-        # tc_pdf_id = UUID of PDF file (for GET PDF)
-        tc_reference_id = str(ad.get("_id")) if ad.get("_id") else ad.get("ref")
-        tc_pdf_id = ad.get("tc_pdf_id")  # UUID from import
-        created_at = ad.get("created_at")
+        # Get stable IDs:
+        # tc_reference_id = MongoDB _id (24-char hex) → for DELETE
+        # tc_pdf_id = UUID → for GET PDF
+        tc_reference_id = str(ref.get("_id"))
+        tc_pdf_id = ref.get("tc_pdf_id")
+        created_at = ref.get("created_at")
         imported_at_str = created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at) if created_at else None
         
-        ad_list.append(BaselineItem(
+        # Get PDF filename from tc_pdf_imports if available
+        pdf_filename = None
+        if tc_pdf_id:
+            pdf_doc = await db.tc_pdf_imports.find_one({"tc_pdf_id": tc_pdf_id}, {"filename": 1})
+            if pdf_doc:
+                pdf_filename = pdf_doc.get("filename")
+        
+        item = BaselineItem(
             identifier=identifier,
-            type="AD",
-            title=ad.get("title"),
-            effective_date=eff_str,
-            recurrence_raw=ad.get("recurrence_type"),
-            recurrence_value=ad.get("recurrence_value"),
+            type=ref_type,
+            title=ref.get("title"),
+            effective_date=None,
+            recurrence_raw=None,
+            recurrence_value=None,
             count_seen=count_seen,
             last_seen_date=last_seen,
             status="FOUND" if count_seen > 0 else "NOT_FOUND",
             origin="USER_IMPORTED_REFERENCE",
             source="TC_PDF_IMPORT",
             pdf_available=bool(tc_pdf_id),
-            pdf_filename=import_filename,
+            pdf_filename=pdf_filename,
             tc_reference_id=tc_reference_id,
             tc_pdf_id=tc_pdf_id,
             imported_at=imported_at_str,
-        ))
-        user_imported_ad_count += 1
-    
-    # Query SB imported for this specific aircraft via PDF
-    async for sb in db.tc_sb.find({
-        "source": "TC_PDF_IMPORT",
-        "import_aircraft_id": aircraft_id,
-        "is_active": True
-    }):
-        identifier = sb.get("ref", "")
-        
-        # Skip if already in canonical baseline
-        if identifier in existing_sb_refs:
-            continue
-        
-        # FILTER GHOST SBs: Must have valid import metadata
-        import_filename = sb.get("import_filename") or sb.get("last_import_filename")
-        if not import_filename:
-            ghost_sb_filtered += 1
-            logger.debug(f"[AD/SB BASELINE] Filtered ghost SB: {identifier} (no import_filename)")
-            continue
-        
-        norm_id = service._normalize_identifier(identifier)
-        
-        count_seen = 0
-        all_dates = []
-        for ocr_ref, dates in ocr_references.items():
-            if service._identifiers_match(norm_id, ocr_ref):
-                count_seen += len(dates)
-                all_dates.extend(dates)
-        
-        sorted_dates = sorted(set(all_dates), reverse=True)
-        last_seen = sorted_dates[0] if sorted_dates else None
-        
-        eff_date = sb.get("effective_date")
-        eff_str = eff_date.strftime("%Y-%m-%d") if hasattr(eff_date, 'strftime') else str(eff_date)[:10] if eff_date else None
-        
-        # Get stable IDs for USER_IMPORTED_REFERENCE
-        # tc_reference_id = MongoDB _id (for DELETE)
-        # tc_pdf_id = UUID of PDF file (for GET PDF)
-        tc_reference_id = str(sb.get("_id")) if sb.get("_id") else sb.get("ref")
-        tc_pdf_id = sb.get("tc_pdf_id")  # UUID from import
-        created_at = sb.get("created_at")
-        imported_at_str = created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at) if created_at else None
-        
-        sb_list.append(BaselineItem(
-            identifier=identifier,
-            type="SB",
-            title=sb.get("title"),
-            effective_date=eff_str,
-            recurrence_raw=sb.get("recurrence_type"),
-            recurrence_value=sb.get("recurrence_value"),
-            count_seen=count_seen,
-            last_seen_date=last_seen,
-            status="FOUND" if count_seen > 0 else "NOT_FOUND",
-            origin="USER_IMPORTED_REFERENCE",
-            source="TC_PDF_IMPORT",
-            pdf_available=bool(tc_pdf_id),
-            pdf_filename=import_filename,
-            tc_reference_id=tc_reference_id,
-            tc_pdf_id=tc_pdf_id,
-            imported_at=imported_at_str,
-        ))
-        user_imported_sb_count += 1
-    
-    # Log filtered ghosts
-    if ghost_ad_filtered > 0 or ghost_sb_filtered > 0:
-        logger.info(
-            f"[AD/SB BASELINE] Filtered {ghost_ad_filtered} ghost AD, {ghost_sb_filtered} ghost SB "
-            f"(missing import_filename)"
         )
+        
+        if ref_type == "AD":
+            ad_list.append(item)
+            user_imported_ad_count += 1
+        else:
+            sb_list.append(item)
+            user_imported_sb_count += 1
     
     # Log user-imported additions (TC-SAFE audit)
     if user_imported_ad_count > 0 or user_imported_sb_count > 0:
         logger.info(
             f"[AD/SB BASELINE] +{user_imported_ad_count} AD, +{user_imported_sb_count} SB "
-            f"user-imported references added from TC_PDF_IMPORT"
+            f"user-imported references from tc_imported_references"
         )
     
     # Sort by identifier
