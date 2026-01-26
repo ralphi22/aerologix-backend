@@ -321,25 +321,24 @@ async def _stream_pdf(
     elif pdf_doc.get("imported_by") != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    # Get storage path
+    # E) Get storage path - read directly (storage_path is absolute)
     storage_path = pdf_doc.get("storage_path")
     if not storage_path:
-        raise HTTPException(status_code=404, detail="PDF file path not found")
+        raise HTTPException(status_code=404, detail="PDF_NOT_FOUND")
     
-    full_path = f"/app/backend/{storage_path}"
-    
-    if not os.path.exists(full_path):
-        raise HTTPException(status_code=404, detail="PDF file not found on disk")
+    # storage_path is now absolute (/tmp/tc_pdfs/...)
+    if not os.path.exists(storage_path):
+        raise HTTPException(status_code=404, detail="PDF_NOT_FOUND")
     
     # Get file size
-    file_size = os.path.getsize(full_path)
+    file_size = os.path.getsize(storage_path)
     
     # Log C) format
     logger.info(f"[TC PDF VIEW] tc_pdf_id={tc_pdf_id} bytes={file_size}")
     
     # C) StreamingResponse avec headers
     def file_iterator():
-        with open(full_path, "rb") as f:
+        with open(storage_path, "rb") as f:
             while chunk := f.read(65536):  # 64KB chunks
                 yield chunk
     
