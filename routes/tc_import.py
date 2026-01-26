@@ -235,14 +235,12 @@ async def delete_reference_by_id(
             pdf_doc = await db.tc_pdf_imports.find_one({"tc_pdf_id": tc_pdf_id})
             if pdf_doc:
                 storage_path = pdf_doc.get("storage_path")
-                if storage_path:
-                    full_path = f"/app/backend/{storage_path}"
-                    if os.path.exists(full_path):
-                        try:
-                            os.remove(full_path)
-                            logger.info(f"[TC REF DELETE] Orphan PDF deleted: {tc_pdf_id}")
-                        except Exception as e:
-                            logger.warning(f"[TC REF DELETE] Failed to delete file: {e}")
+                if storage_path and os.path.exists(storage_path):
+                    try:
+                        os.remove(storage_path)
+                        logger.info(f"[TC REF DELETE] Orphan PDF deleted: {tc_pdf_id}")
+                    except Exception as e:
+                        logger.warning(f"[TC REF DELETE] Failed to delete file: {e}")
                 await db.tc_pdf_imports.delete_one({"tc_pdf_id": tc_pdf_id})
     
     # B) Response format
