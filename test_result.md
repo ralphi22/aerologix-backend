@@ -59,6 +59,18 @@ backend:
         agent: "testing"
         comment: "✅ Collaborative AD/SB Detection system fully tested and working. All alert endpoints tested successfully: (1) GET /api/alerts/adsb returns correct structure {alerts: [], total_count: 0, unread_count: 0}, (2) GET /api/alerts/adsb/count returns correct counts {unread_count: 0, total_count: 0}, (3) GET /api/alerts/adsb/global-stats returns correct statistics {total_global_references: 0, total_alerts_created: 0, top_models: [], disclaimer: 'TC-SAFE: Statistics only, no compliance inference'}, (4) Authentication works properly with test@aerologix.ca/password123, (5) Error handling for invalid alert IDs returns 400 as expected, (6) All response structures match expected format exactly. Alert management endpoints (read/dismiss) ready for when alerts exist. System is fully functional and ready for production use."
 
+  - task: "TC Import Endpoints"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/tc_import.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TC Import endpoints fully tested and working with no regression. All 3 test scenarios passed: (1) GET /api/adsb/tc/references/{aircraft_id} returns 200 OK with correct response structure including new flags (has_user_pdf, can_delete, can_open_pdf), (2) can_delete is always true for user imports as expected, (3) DELETE /api/adsb/tc/reference-by-id/{tc_reference_id} endpoint ready and functional, (4) GET /api/adsb/tc/pdf/{tc_pdf_id} endpoint ready and functional. Empty references array returned when no imports exist, which is expected behavior for test aircraft. All required fields present and validated. Authentication with test@aerologix.ca/password123 works properly. No regression detected in TC Import functionality."
+
 frontend:
   - task: "Frontend Testing"
     implemented: false
