@@ -105,6 +105,17 @@ ENGINE_PATTERNS = [
     (r'\bmagneto\b', 0.75, "MAGNETO"),
 ]
 
+# Fire extinguisher limitations
+FIRE_EXTINGUISHER_PATTERNS = [
+    (r'\bfire\s+extinguisher\b', 0.90, "FIRE EXTINGUISHER"),
+    (r'\bextinguisher\s+(?:expired|overdue|due)\b', 0.95, "EXTINGUISHER EXPIRED"),
+    (r'\bextinguisher\s+(?:removed|missing)\b', 0.90, "EXTINGUISHER REMOVED"),
+    (r'\bextinguisher\s+(?:inspection|service)\b', 0.85, "EXTINGUISHER INSPECTION"),
+    (r'\bhalon\b', 0.80, "HALON"),
+    (r'\bco2\s+extinguisher\b', 0.85, "CO2 EXTINGUISHER"),
+    (r'\bdry\s+(?:chemical|powder)\s+extinguisher\b', 0.85, "DRY CHEMICAL EXTINGUISHER"),
+]
+
 # General operational limitations
 GENERAL_PATTERNS = [
     # Condition-based
