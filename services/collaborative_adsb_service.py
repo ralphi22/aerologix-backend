@@ -201,9 +201,12 @@ class CollaborativeADSBService:
             )
             return False
         
-        # Create new entry
+        # Create new entry with CANONICAL aircraft_type_key
         doc = {
             "global_key": global_key,
+            "aircraft_type_key": type_key,  # CANONICAL: manufacturer::model
+            "manufacturer_normalized": mfr_norm,
+            "manufacturer_original": manufacturer,
             "model_normalized": model_norm,
             "model_original": model,
             "reference_normalized": ref_norm,
@@ -219,7 +222,7 @@ class CollaborativeADSBService:
         
         try:
             await self.db.tc_adsb_global_references.insert_one(doc)
-            logger.info(f"[COLLABORATIVE] New reference added to pool: {reference} for model={model}")
+            logger.info(f"[COLLABORATIVE] New reference added to pool: {reference} for type_key={type_key}")
             return True
         except Exception as e:
             # Handle race condition (duplicate key)
@@ -227,35 +230,30 @@ class CollaborativeADSBService:
             return False
     
     # --------------------------------------------------------
-    # FIND USERS WITH SAME MODEL
+    # FIND USERS WITH SAME AIRCRAFT TYPE (CANONICAL KEY)
     # --------------------------------------------------------
     
-    async def find_users_with_model(
+    async def find_users_with_aircraft_type(
         self,
+        manufacturer: str,
         model: str,
         exclude_user_id: str
     ) -> List[Dict[str, Any]]:
         """
-        Find all users who have an aircraft with the same model.
+        Find all users who have an aircraft with the same CANONICAL type.
+        
+        Uses aircraft_type_key = manufacturer::model for matching.
+        NO matching by registration or serial number.
         
         Returns:
-            List of {user_id, aircraft_id, registration} dicts
+            List of {user_id, aircraft_id, aircraft_type_key} dicts
         """
-        model_norm = self.normalize_model(model)
+        target_type_key = self.create_aircraft_type_key(manufacturer, model)
         
-        if not model_norm:
+        if not target_type_key or target_type_key == "::":
             return []
         
-        # Build regex for model matching (e.g., "172" matches "172M", "172N")
-        # Use the first numeric portion as base
-        base_match = re.match(r'^([A-Z]*\d+)', model_norm)
-        if base_match:
-            base_pattern = base_match.group(1)
-            regex_pattern = f"^{re.escape(base_pattern)}"
-        else:
-            regex_pattern = f"^{re.escape(model_norm)}"
-        
-        # Find all aircraft with matching model (different users)
+        # Find all aircraft with matching type (different users)
         results = []
         
         cursor = self.db.aircrafts.find({
@@ -263,15 +261,17 @@ class CollaborativeADSBService:
         })
         
         async for aircraft in cursor:
+            aircraft_mfr = aircraft.get("manufacturer", "")
             aircraft_model = aircraft.get("model", "")
-            aircraft_model_norm = self.normalize_model(aircraft_model)
+            aircraft_type_key = self.create_aircraft_type_key(aircraft_mfr, aircraft_model)
             
-            # Check if models are compatible
-            if re.match(regex_pattern, aircraft_model_norm):
+            # CANONICAL MATCH: exact aircraft_type_key
+            if aircraft_type_key == target_type_key:
                 results.append({
                     "user_id": aircraft["user_id"],
                     "aircraft_id": aircraft["_id"],
-                    "registration": aircraft.get("registration"),
+                    "aircraft_type_key": aircraft_type_key,
+                    "manufacturer": aircraft_mfr,
                     "model": aircraft_model
                 })
         
