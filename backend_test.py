@@ -1108,6 +1108,268 @@ class AeroLogixBackendTester:
         
         return success and success_invalid
 
+    def test_collaborative_alerts_endpoints(self):
+        """Test Collaborative AD/SB Alert endpoints"""
+        print("🚨 Testing Collaborative AD/SB Alert Endpoints...")
+        
+        # Test 1: GET /api/alerts/adsb - Get alerts list
+        success1, response1 = self.run_test(
+            "Get AD/SB alerts list",
+            "GET",
+            "api/alerts/adsb",
+            200
+        )
+        
+        if not success1:
+            return False
+        
+        # Validate response structure for alerts list
+        required_fields = ["alerts", "total_count", "unread_count"]
+        missing_fields = [field for field in required_fields if field not in response1]
+        
+        if missing_fields:
+            self.log_test(
+                "AD/SB alerts list response structure",
+                False,
+                f"Missing required fields: {missing_fields}"
+            )
+            return False
+        
+        # Validate alerts is an array
+        alerts = response1.get("alerts", [])
+        if not isinstance(alerts, list):
+            self.log_test(
+                "AD/SB alerts format",
+                False,
+                f"Alerts should be an array, got {type(alerts)}"
+            )
+            return False
+        
+        # Validate counts are integers
+        total_count = response1.get("total_count")
+        unread_count = response1.get("unread_count")
+        
+        if not isinstance(total_count, int) or not isinstance(unread_count, int):
+            self.log_test(
+                "AD/SB alerts count types",
+                False,
+                f"Counts should be integers, got total_count={type(total_count)}, unread_count={type(unread_count)}"
+            )
+            return False
+        
+        # Validate each alert structure (if any alerts exist)
+        for i, alert in enumerate(alerts):
+            required_alert_fields = [
+                "id", "type", "aircraft_id", "aircraft_model", "reference",
+                "reference_type", "message", "status", "created_at"
+            ]
+            missing_alert_fields = [field for field in required_alert_fields if field not in alert]
+            
+            if missing_alert_fields:
+                self.log_test(
+                    f"AD/SB alert {i} structure",
+                    False,
+                    f"Missing alert fields: {missing_alert_fields}"
+                )
+                return False
+            
+            # Validate alert status
+            if alert.get("status") not in ["UNREAD", "READ", "DISMISSED"]:
+                self.log_test(
+                    f"AD/SB alert {i} status",
+                    False,
+                    f"Invalid status: {alert.get('status')}, expected UNREAD/READ/DISMISSED"
+                )
+                return False
+        
+        self.log_test(
+            "AD/SB alerts list validation",
+            True,
+            f"All validations passed. Total alerts: {total_count}, Unread: {unread_count}"
+        )
+        
+        # Test 2: GET /api/alerts/adsb/count - Get alert counts
+        success2, response2 = self.run_test(
+            "Get AD/SB alert counts",
+            "GET",
+            "api/alerts/adsb/count",
+            200
+        )
+        
+        if not success2:
+            return False
+        
+        # Validate count response structure
+        required_count_fields = ["unread_count", "total_count"]
+        missing_count_fields = [field for field in required_count_fields if field not in response2]
+        
+        if missing_count_fields:
+            self.log_test(
+                "AD/SB alert count response structure",
+                False,
+                f"Missing required fields: {missing_count_fields}"
+            )
+            return False
+        
+        # Validate count consistency with alerts list
+        if response2.get("unread_count") != response1.get("unread_count"):
+            self.log_test(
+                "AD/SB alert count consistency",
+                False,
+                f"Unread count mismatch: list={response1.get('unread_count')}, count={response2.get('unread_count')}"
+            )
+            return False
+        
+        self.log_test(
+            "AD/SB alert counts validation",
+            True,
+            f"Count endpoint working. Unread: {response2.get('unread_count')}, Total: {response2.get('total_count')}"
+        )
+        
+        # Test 3: GET /api/alerts/adsb/global-stats - Get global statistics
+        success3, response3 = self.run_test(
+            "Get AD/SB global statistics",
+            "GET",
+            "api/alerts/adsb/global-stats",
+            200
+        )
+        
+        if not success3:
+            return False
+        
+        # Validate global stats response structure
+        required_stats_fields = ["total_global_references", "total_alerts_created", "top_models", "disclaimer"]
+        missing_stats_fields = [field for field in required_stats_fields if field not in response3]
+        
+        if missing_stats_fields:
+            self.log_test(
+                "AD/SB global stats response structure",
+                False,
+                f"Missing required fields: {missing_stats_fields}"
+            )
+            return False
+        
+        # Validate field types
+        if not isinstance(response3.get("total_global_references"), int):
+            self.log_test(
+                "AD/SB global stats total_global_references type",
+                False,
+                f"total_global_references should be int, got {type(response3.get('total_global_references'))}"
+            )
+            return False
+        
+        if not isinstance(response3.get("total_alerts_created"), int):
+            self.log_test(
+                "AD/SB global stats total_alerts_created type",
+                False,
+                f"total_alerts_created should be int, got {type(response3.get('total_alerts_created'))}"
+            )
+            return False
+        
+        if not isinstance(response3.get("top_models"), list):
+            self.log_test(
+                "AD/SB global stats top_models type",
+                False,
+                f"top_models should be list, got {type(response3.get('top_models'))}"
+            )
+            return False
+        
+        if not response3.get("disclaimer"):
+            self.log_test(
+                "AD/SB global stats disclaimer",
+                False,
+                "Disclaimer field is missing or empty"
+            )
+            return False
+        
+        self.log_test(
+            "AD/SB global stats validation",
+            True,
+            f"All validations passed. Global refs: {response3.get('total_global_references')}, Alerts created: {response3.get('total_alerts_created')}, Top models: {len(response3.get('top_models', []))}"
+        )
+        
+        # Test 4: Alert management (if alerts exist)
+        alert_management_success = True
+        
+        if len(alerts) > 0:
+            # Test marking an alert as read
+            first_alert_id = alerts[0]["id"]
+            
+            success4, response4 = self.run_test(
+                f"Mark alert {first_alert_id} as read",
+                "PUT",
+                f"api/alerts/adsb/{first_alert_id}/read",
+                200
+            )
+            
+            if success4:
+                if response4.get("ok") and response4.get("status") == "READ":
+                    self.log_test(
+                        "Mark alert as read",
+                        True,
+                        f"Alert {first_alert_id} marked as read successfully"
+                    )
+                else:
+                    self.log_test(
+                        "Mark alert as read response",
+                        False,
+                        f"Unexpected response: {response4}"
+                    )
+                    alert_management_success = False
+            else:
+                alert_management_success = False
+            
+            # Test dismissing an alert (use second alert if available, or same alert)
+            dismiss_alert_id = alerts[1]["id"] if len(alerts) > 1 else first_alert_id
+            
+            success5, response5 = self.run_test(
+                f"Dismiss alert {dismiss_alert_id}",
+                "PUT",
+                f"api/alerts/adsb/{dismiss_alert_id}/dismiss",
+                200
+            )
+            
+            if success5:
+                if response5.get("ok") and response5.get("status") == "DISMISSED":
+                    self.log_test(
+                        "Dismiss alert",
+                        True,
+                        f"Alert {dismiss_alert_id} dismissed successfully"
+                    )
+                else:
+                    self.log_test(
+                        "Dismiss alert response",
+                        False,
+                        f"Unexpected response: {response5}"
+                    )
+                    alert_management_success = False
+            else:
+                alert_management_success = False
+        else:
+            self.log_test(
+                "Alert management tests",
+                True,
+                "No alerts available for management testing (expected for new system)"
+            )
+        
+        # Test error handling with invalid alert ID
+        success6, response6 = self.run_test(
+            "Mark invalid alert as read",
+            "PUT",
+            "api/alerts/adsb/invalid_alert_id/read",
+            400  # Should return 400 for invalid ObjectId format
+        )
+        
+        if not success6:
+            self.log_test(
+                "Invalid alert ID error handling",
+                False,
+                "Expected 400 for invalid alert_id format"
+            )
+            return False
+        
+        return success1 and success2 and success3 and alert_management_success and success6
+
     def run_all_tests(self):
         """Run all tests in sequence"""
         print("🚀 Starting AeroLogix AI Backend Tests")
