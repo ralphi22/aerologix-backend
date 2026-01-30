@@ -1,15 +1,23 @@
 """
 Collaborative AD/SB Detection Service
 
-Detects new AD/SB references and notifies users with the same aircraft model.
+Detects new AD/SB references and notifies users with the same aircraft TYPE.
 
 ARCHITECTURE:
-1. Global reference pool: tc_adsb_global_references (model + reference)
+1. Global reference pool: tc_adsb_global_references (aircraft_type_key + reference)
 2. User alerts: tc_adsb_alerts (per user, per aircraft)
 
+CANONICAL KEY (OBLIGATOIRE):
+aircraft_type_key = normalize(manufacturer) + "::" + normalize(model)
+
+NO comparison by:
+- User ID
+- Registration
+- Serial number
+
 PROCESS:
-1. On TC import → check if reference is new for this model
-2. If new → add to global pool + create alerts for other users
+1. On TC import → check if reference is new for this aircraft_type_key
+2. If new → add to global pool + create alerts for other users with same type
 3. Alerts are informational only (no compliance decisions)
 
 TC-SAFE:
@@ -35,11 +43,12 @@ logger = logging.getLogger(__name__)
 class NewReferenceAlert(BaseModel):
     """Alert for a new AD/SB reference"""
     type: str = "NEW_AD_SB"
-    aircraft_model: str
+    aircraft_type_key: str  # CANONICAL KEY: manufacturer::model
+    manufacturer: str
+    model: str
     reference: str
     reference_type: str  # "AD" or "SB"
     message: str
-    contributed_by_user_id: str  # Anonymized to protect privacy
     created_at: datetime
 
 
@@ -49,6 +58,7 @@ class CollaborativeDetectionResult(BaseModel):
     alerts_created_count: int = 0
     users_notified: int = 0
     references_added_to_pool: List[str] = []
+    aircraft_type_key: str = ""
 
 
 # ============================================================
@@ -59,10 +69,12 @@ class CollaborativeADSBService:
     """
     Service for collaborative AD/SB reference detection.
     
+    CANONICAL KEY: aircraft_type_key = manufacturer::model
+    
     Collections used:
-    - tc_adsb_global_references: Global pool of model+reference pairs
+    - tc_adsb_global_references: Global pool of type_key+reference pairs
     - tc_adsb_alerts: User alerts for new references
-    - aircrafts: To find users with same model
+    - aircrafts: To find users with same aircraft_type_key
     
     TC-SAFE: Detection only, no compliance decisions.
     """
@@ -71,8 +83,20 @@ class CollaborativeADSBService:
         self.db = db
     
     # --------------------------------------------------------
-    # NORMALIZATION
+    # NORMALIZATION - CANONICAL KEY
     # --------------------------------------------------------
+    
+    def normalize_manufacturer(self, manufacturer: str) -> str:
+        """
+        Normalize manufacturer name for matching.
+        
+        - Uppercase
+        - Remove spaces and special chars
+        - Keep alphanumeric only
+        """
+        if not manufacturer:
+            return ""
+        return re.sub(r'[^A-Z0-9]', '', manufacturer.upper())
     
     def normalize_model(self, model: str) -> str:
         """
