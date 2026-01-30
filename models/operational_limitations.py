@@ -26,6 +26,7 @@ class LimitationCategory(str, Enum):
     PROPELLER = "PROPELLER"
     ENGINE = "ENGINE"
     AIRFRAME = "AIRFRAME"
+    FIRE_EXTINGUISHER = "FIRE_EXTINGUISHER"
     GENERAL = "GENERAL"
 
 
