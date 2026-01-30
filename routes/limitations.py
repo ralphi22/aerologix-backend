@@ -286,7 +286,32 @@ async def get_critical_mentions(
             "source": "limitation_detector"
         })
     
-    # General limitations (includes fire extinguisher if detected)
+    # Fire extinguisher limitations (dedicated category)
+    fire_cursor = db.operational_limitations.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "category": "FIRE_EXTINGUISHER"
+    }).sort("report_date", -1)
+    
+    async for doc in fire_cursor:
+        report_date_str = None
+        if doc.get("report_date"):
+            if isinstance(doc["report_date"], datetime):
+                report_date_str = doc["report_date"].strftime("%Y-%m-%d")
+            else:
+                report_date_str = str(doc["report_date"])
+        
+        critical_mentions["fire_extinguisher"].append({
+            "id": str(doc.get("_id", "")),
+            "text": doc.get("limitation_text", ""),
+            "keywords": doc.get("detected_keywords", []),
+            "confidence": doc.get("confidence", 0.5),
+            "report_id": doc.get("report_id"),
+            "report_date": report_date_str,
+            "source": "limitation_detector"
+        })
+    
+    # General limitations (other categories)
     general_cursor = db.operational_limitations.find({
         "aircraft_id": aircraft_id,
         "user_id": current_user.id,
@@ -303,7 +328,7 @@ async def get_critical_mentions(
         
         text_lower = (doc.get("limitation_text") or "").lower()
         
-        # Check if this is a fire extinguisher mention
+        # Legacy fallback: Check if this is a fire extinguisher mention (for old data)
         if "fire" in text_lower or "extinguisher" in text_lower:
             critical_mentions["fire_extinguisher"].append({
                 "id": str(doc.get("_id", "")),
