@@ -101,7 +101,9 @@ async def get_alerts(
             id=str(doc["_id"]),
             type=doc.get("type", "NEW_AD_SB"),
             aircraft_id=doc.get("aircraft_id", ""),
-            aircraft_model=doc.get("aircraft_model", ""),
+            aircraft_type_key=doc.get("aircraft_type_key", ""),  # CANONICAL KEY
+            manufacturer=doc.get("manufacturer"),
+            model=doc.get("model"),
             reference=doc.get("reference", ""),
             reference_type=doc.get("reference_type", "AD"),
             message=doc.get("message", ""),
