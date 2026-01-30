@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 """
-TC AD/SB Detection Backend Testing
+AeroLogix AI Backend Testing
 
-Tests the monthly backend mechanism to detect newly published Transport Canada AD/SB
-applicable to each aircraft and expose a simple alert flag.
-
-Test Coverage:
+Tests the backend API endpoints including:
 - Authentication
-- Detection endpoints (POST /api/tc-adsb/detect, detect-all, detect-scheduled)
-- Alert management (GET alert status, POST mark-reviewed)
-- Audit logging (GET audit-log)
-- Version tracking (GET version)
-- Aircraft model integration (adsb_has_new_tc_items field)
-- Auto-clear when viewing AD/SB module
-- Detection logic (skip if same version, proper comparison)
+- Aircraft management
+- Operational Limitations (Critical Mentions endpoint)
+- TC AD/SB Detection system
+- Alert management
+- Audit logging
 """
 
 import requests
