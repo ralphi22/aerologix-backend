@@ -381,10 +381,10 @@ class LimitationDetectorService:
             if date_str:
                 try:
                     report_date = datetime.strptime(date_str, "%Y-%m-%d")
-                except:
+                except ValueError:
                     try:
                         report_date = datetime.strptime(date_str, "%Y/%m/%d")
-                    except:
+                    except ValueError:
                         pass
             
             now = datetime.utcnow()
