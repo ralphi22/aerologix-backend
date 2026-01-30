@@ -167,13 +167,28 @@ async def list_imported_references(
         created_at = doc.get("created_at")
         created_at_str = created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at)
         
+        tc_pdf_id = doc.get("tc_pdf_id", "")
+        has_pdf = bool(tc_pdf_id)
+        
+        # Check if PDF file actually exists
+        can_open = False
+        if has_pdf:
+            pdf_doc = await db.tc_pdf_imports.find_one({"tc_pdf_id": tc_pdf_id})
+            if pdf_doc:
+                storage_path = pdf_doc.get("storage_path")
+                can_open = storage_path and os.path.exists(storage_path)
+        
         references.append(ImportedReferenceItem(
             tc_reference_id=str(doc["_id"]),  # ObjectId → string
             identifier=doc.get("identifier", ""),
             type=doc.get("type", "AD"),
-            tc_pdf_id=doc.get("tc_pdf_id", ""),  # UUID
-            pdf_available=bool(doc.get("tc_pdf_id")),
-            created_at=created_at_str
+            tc_pdf_id=tc_pdf_id,  # UUID
+            pdf_available=has_pdf,
+            created_at=created_at_str,
+            # EXPLICIT FLAGS
+            has_user_pdf=has_pdf,
+            can_delete=True,  # User can ALWAYS delete their imports
+            can_open_pdf=can_open  # True only if file exists
         ))
     
     return ImportedReferencesResponse(
