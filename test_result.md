@@ -47,6 +47,18 @@ backend:
         agent: "testing"
         comment: "✅ GET /api/adsb/tc-comparison/{aircraft_id} endpoint fully tested and working. All validations passed: (1) Returns 200 OK with correct response structure, (2) All required fields present (aircraft_id, registration, items, total_tc_references, total_seen, total_not_seen, ocr_documents_analyzed, source, disclaimer), (3) Source field correctly set to 'tc_imported_references', (4) Items array structure validated with proper seen_in_documents boolean flags, (5) Count consistency verified (total_seen + total_not_seen = total_tc_references), (6) 404 error handling for invalid aircraft_id works correctly, (7) Disclaimer field present. Empty items array returned when no TC references imported yet, which is expected behavior for test aircraft."
 
+  - task: "Collaborative AD/SB Detection System"
+    implemented: true
+    working: true
+    file: "/app/routes/collaborative_alerts.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ Collaborative AD/SB Detection system fully tested and working. All alert endpoints tested successfully: (1) GET /api/alerts/adsb returns correct structure {alerts: [], total_count: 0, unread_count: 0}, (2) GET /api/alerts/adsb/count returns correct counts {unread_count: 0, total_count: 0}, (3) GET /api/alerts/adsb/global-stats returns correct statistics {total_global_references: 0, total_alerts_created: 0, top_models: [], disclaimer: 'TC-SAFE: Statistics only, no compliance inference'}, (4) Authentication works properly with test@aerologix.ca/password123, (5) Error handling for invalid alert IDs returns 400 as expected, (6) All response structures match expected format exactly. Alert management endpoints (read/dismiss) ready for when alerts exist. System is fully functional and ready for production use."
+
 frontend:
   - task: "Frontend Testing"
     implemented: false
