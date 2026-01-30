@@ -45,13 +45,17 @@ class ImportResponse(BaseModel):
 
 
 class ImportedReferenceItem(BaseModel):
-    """Single imported reference"""
+    """Single imported reference with explicit permission flags for frontend"""
     tc_reference_id: str = Field(..., description="ObjectId (24-char hex) - use for DELETE")
     identifier: str = Field(..., description="TC reference (e.g., CF-2024-01) - display only")
     type: str
     tc_pdf_id: str = Field(..., description="UUID - use for GET PDF")
     pdf_available: bool = True
     created_at: str
+    # EXPLICIT PERMISSION FLAGS (for frontend)
+    has_user_pdf: bool = Field(True, description="True if user uploaded PDF exists")
+    can_delete: bool = Field(True, description="True - user can always delete their imports")
+    can_open_pdf: bool = Field(True, description="True if PDF can be opened")
 
 
 class ImportedReferencesResponse(BaseModel):
