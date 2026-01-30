@@ -1294,3 +1294,257 @@ async def aircraft_adsb_structured_alias(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to perform structured AD/SB comparison"
         )
+
+
+# ============================================================
+# ENDPOINT: AD/SB OCR AGGREGATION (SCANNED DOCUMENTS ONLY)
+# ============================================================
+# This endpoint provides aggregated AD/SB references detected
+# from OCR scanned documents ONLY.
+#
+# NO TC baseline, NO compliance, NO recurrence logic.
+# Pure factual counting: how many times was this reference seen?
+# ============================================================
+
+class OCRScanADSBItem(BaseModel):
+    """Single AD/SB reference detected from scanned documents"""
+    reference: str
+    type: str  # "AD" or "SB"
+    occurrence_count: int  # Number of scanned documents where this reference appears
+    source: str = "scanned_documents"
+    first_seen_date: Optional[str] = None  # Earliest detection date
+    last_seen_date: Optional[str] = None  # Most recent detection date
+    scan_ids: List[str] = []  # List of OCR scan IDs where detected
+
+
+class OCRScanADSBResponse(BaseModel):
+    """
+    Aggregated AD/SB references from OCR scanned documents.
+    
+    TC-SAFE: Pure documentary evidence, no compliance decisions.
+    """
+    aircraft_id: str
+    registration: Optional[str] = None
+    items: List[OCRScanADSBItem] = []
+    total_unique_references: int = 0
+    total_ad: int = 0
+    total_sb: int = 0
+    documents_analyzed: int = 0
+    source: str = "scanned_documents"
+    disclaimer: str = (
+        "These references were detected by OCR from scanned maintenance documents. "
+        "This is DOCUMENTARY EVIDENCE ONLY, not a compliance assessment. "
+        "Verify all information with original documents and a licensed AME."
+    )
+
+
+def normalize_adsb_reference(ref: str) -> str:
+    """
+    Normalize AD/SB reference for aggregation.
+    
+    - Uppercase
+    - Remove extra whitespace
+    - Standardize separators
+    """
+    if not ref:
+        return ""
+    
+    # Uppercase and strip
+    normalized = ref.strip().upper()
+    
+    # Remove multiple spaces
+    normalized = re.sub(r'\s+', ' ', normalized)
+    
+    # Standardize separators (. and space -> -)
+    normalized = re.sub(r'[.\s]+', '-', normalized)
+    
+    # Remove trailing/leading hyphens
+    normalized = normalized.strip('-')
+    
+    return normalized
+
+
+def detect_adsb_type(reference: str) -> str:
+    """
+    Detect if reference is AD or SB based on common patterns.
+    
+    Returns: "AD", "SB", or "AD" as default
+    """
+    ref_upper = reference.upper()
+    
+    # SB patterns
+    sb_patterns = [
+        r'^SB[\s\-]',  # Starts with SB
+        r'\bSB\d',     # SB followed by number
+        r'\bSB-',      # SB-
+        r'SERVICE\s*BULLETIN',
+        r'^PSB[\s\-]', # Piper Service Bulletin
+        r'^CSB[\s\-]', # Cessna Service Bulletin
+        r'^SEL[\s\-]', # Service Letter
+    ]
+    
+    for pattern in sb_patterns:
+        if re.search(pattern, ref_upper):
+            return "SB"
+    
+    # AD patterns (or default)
+    # AD typically starts with "AD", "CF-", year format, etc.
+    return "AD"
+
+
+@router.get(
+    "/ocr-scan/{aircraft_id}",
+    response_model=OCRScanADSBResponse,
+    summary="AD/SB from OCR Scanned Documents [AGGREGATED]",
+    description="""
+    **AD/SB References from Scanned Documents**
+    
+    Returns aggregated AD/SB references detected by OCR from 
+    scanned maintenance documents.
+    
+    **Key Features:**
+    - One row per unique reference (no duplicates)
+    - `occurrence_count`: Number of documents where reference appears
+    - NO TC baseline data
+    - NO compliance logic
+    - NO recurrence calculations
+    
+    **Source:** OCR Applied documents only (user-validated)
+    
+    **TC-SAFE:** Documentary evidence only, not compliance assessment.
+    """
+)
+async def get_ocr_scan_adsb(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    Get aggregated AD/SB references from OCR scanned documents.
+    
+    Pure counting: how many times was each reference detected?
+    No duplicates, deterministic payload.
+    """
+    logger.info(f"[OCR-SCAN AD/SB] Aggregating | aircraft_id={aircraft_id} | user={current_user.id}")
+    
+    # Verify aircraft belongs to user
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aircraft not found"
+        )
+    
+    registration = aircraft.get("registration")
+    
+    # Aggregation structure: {normalized_ref: {data}}
+    aggregation: Dict[str, Dict[str, Any]] = {}
+    documents_analyzed = 0
+    
+    # Get ONLY APPLIED OCR scans (user-validated documentary evidence)
+    cursor = db.ocr_scans.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "status": "APPLIED"
+    }).sort("created_at", 1)  # Oldest first for first_seen
+    
+    async for scan in cursor:
+        documents_analyzed += 1
+        scan_id = str(scan.get("_id", ""))
+        scan_date = scan.get("created_at")
+        date_str = scan_date.strftime("%Y-%m-%d") if scan_date else None
+        
+        extracted_data = scan.get("extracted_data", {})
+        adsb_refs = extracted_data.get("ad_sb_references", [])
+        
+        for ref in adsb_refs:
+            # Extract reference string
+            if isinstance(ref, dict):
+                raw_ref = ref.get("reference_number") or ref.get("identifier") or ref.get("ref") or ""
+                ref_type = ref.get("type", "").upper()
+            elif isinstance(ref, str):
+                raw_ref = ref
+                ref_type = ""
+            else:
+                continue
+            
+            if not raw_ref:
+                continue
+            
+            # Normalize reference
+            normalized = normalize_adsb_reference(raw_ref)
+            
+            if not normalized:
+                continue
+            
+            # Detect type if not provided
+            if ref_type not in ["AD", "SB"]:
+                ref_type = detect_adsb_type(normalized)
+            
+            # Initialize or update aggregation
+            if normalized not in aggregation:
+                aggregation[normalized] = {
+                    "reference": normalized,
+                    "type": ref_type,
+                    "occurrence_count": 0,
+                    "first_seen_date": date_str,
+                    "last_seen_date": date_str,
+                    "scan_ids": []
+                }
+            
+            # Increment count and update tracking
+            agg = aggregation[normalized]
+            agg["occurrence_count"] += 1
+            agg["last_seen_date"] = date_str  # Update to most recent
+            
+            if scan_id not in agg["scan_ids"]:
+                agg["scan_ids"].append(scan_id)
+    
+    # Build response items
+    items = [
+        OCRScanADSBItem(
+            reference=data["reference"],
+            type=data["type"],
+            occurrence_count=data["occurrence_count"],
+            source="scanned_documents",
+            first_seen_date=data["first_seen_date"],
+            last_seen_date=data["last_seen_date"],
+            scan_ids=data["scan_ids"]
+        )
+        for data in aggregation.values()
+    ]
+    
+    # Sort by reference for deterministic output
+    items.sort(key=lambda x: x.reference)
+    
+    # Count AD vs SB
+    total_ad = sum(1 for item in items if item.type == "AD")
+    total_sb = sum(1 for item in items if item.type == "SB")
+    
+    # Logging
+    logger.info(
+        f"[OCR-SCAN AD/SB] aircraft={aircraft_id} | "
+        f"unique_refs={len(items)} (AD={total_ad}, SB={total_sb}) | "
+        f"documents={documents_analyzed}"
+    )
+    
+    # Debug: Top occurrences
+    if items:
+        top_items = sorted(items, key=lambda x: x.occurrence_count, reverse=True)[:5]
+        top_log = ", ".join([f"{i.reference}({i.occurrence_count})" for i in top_items])
+        logger.info(f"[OCR-SCAN AD/SB] Top occurrences: {top_log}")
+    
+    return OCRScanADSBResponse(
+        aircraft_id=aircraft_id,
+        registration=registration,
+        items=items,
+        total_unique_references=len(items),
+        total_ad=total_ad,
+        total_sb=total_sb,
+        documents_analyzed=documents_analyzed,
+        source="scanned_documents"
+    )
