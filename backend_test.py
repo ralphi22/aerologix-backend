@@ -581,7 +581,7 @@ class AeroLogixBackendTester:
 
 def main():
     """Main test runner"""
-    tester = TCADSBDetectionTester()
+    tester = AeroLogixBackendTester()
     
     try:
         success = tester.run_all_tests()
