@@ -162,3 +162,7 @@ tc_data/
 # Environment files
 *.env
 *.env.*
+-e 
+# Environment files
+*.env
+*.env.*
