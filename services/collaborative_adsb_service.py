@@ -293,21 +293,25 @@ class CollaborativeADSBService:
         self,
         user_id: str,
         aircraft_id: str,
+        manufacturer: str,
         model: str,
         reference: str,
-        reference_type: str,
-        contributed_by: str
+        reference_type: str
     ) -> bool:
         """
         Create an alert for a user about a new reference.
         
+        Uses CANONICAL aircraft_type_key for identification.
+        
         Returns:
             True if alert created, False if duplicate
         """
-        # Check for duplicate alert
+        aircraft_type_key = self.create_aircraft_type_key(manufacturer, model)
+        
+        # Check for duplicate alert (by aircraft_type_key + reference)
         existing = await self.db.tc_adsb_alerts.find_one({
             "user_id": user_id,
-            "aircraft_id": aircraft_id,
+            "aircraft_type_key": aircraft_type_key,
             "reference": reference,
             "status": {"$ne": "DISMISSED"}
         })
@@ -315,17 +319,18 @@ class CollaborativeADSBService:
         if existing:
             return False
         
-        # Create alert
+        # Create alert with CANONICAL key
         alert_doc = {
             "type": "NEW_AD_SB",
             "user_id": user_id,
             "aircraft_id": aircraft_id,
-            "aircraft_model": model,
+            "aircraft_type_key": aircraft_type_key,  # CANONICAL KEY
+            "manufacturer": manufacturer,
+            "model": model,
             "reference": reference,
             "reference_type": reference_type,
-            "message": f"A new {reference_type} reference ({reference}) was added for your aircraft model ({model}). Please review with your AME.",
+            "message": f"A new {reference_type} reference ({reference}) was added for your aircraft type ({manufacturer} {model}). Please review with your AME.",
             "status": "UNREAD",
-            "contributed_by_aircraft_model": model,  # Privacy: no user info
             "created_at": datetime.now(timezone.utc),
             "read_at": None,
             "dismissed_at": None
@@ -348,15 +353,18 @@ class CollaborativeADSBService:
         reference_type: str,
         aircraft_id: str,
         user_id: str,
+        manufacturer: str,
         model: str
     ) -> CollaborativeDetectionResult:
         """
         Process imported references for collaborative detection.
         
+        Uses CANONICAL aircraft_type_key = manufacturer::model
+        
         Called after TC PDF import to:
-        1. Check each reference against global pool
+        1. Check each reference against global pool (by type_key)
         2. Add new references to pool
-        3. Create alerts for other users with same model
+        3. Create alerts for other users with same aircraft_type_key
         
         Args:
             references: List of imported reference identifiers
