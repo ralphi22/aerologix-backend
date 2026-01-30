@@ -35,6 +35,18 @@ backend:
         agent: "testing"
         comment: "✅ GET /api/adsb/ocr-scan/{aircraft_id} endpoint fully tested and working. All validations passed: (1) Returns 200 OK with correct response structure, (2) All required fields present (aircraft_id, registration, items, total_unique_references, total_ad, total_sb, documents_analyzed, source, disclaimer), (3) Source field correctly set to 'scanned_documents', (4) Items array structure validated with proper AD/SB type classification, (5) Count fields match actual items, (6) 404 error handling for invalid aircraft_id works correctly. Empty items array returned when no OCR scans exist, which is expected behavior for test aircraft."
 
+  - task: "TC vs OCR Comparison Endpoint"
+    implemented: true
+    working: true
+    file: "/app/routes/adsb.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ GET /api/adsb/tc-comparison/{aircraft_id} endpoint fully tested and working. All validations passed: (1) Returns 200 OK with correct response structure, (2) All required fields present (aircraft_id, registration, items, total_tc_references, total_seen, total_not_seen, ocr_documents_analyzed, source, disclaimer), (3) Source field correctly set to 'tc_imported_references', (4) Items array structure validated with proper seen_in_documents boolean flags, (5) Count consistency verified (total_seen + total_not_seen = total_tc_references), (6) 404 error handling for invalid aircraft_id works correctly, (7) Disclaimer field present. Empty items array returned when no TC references imported yet, which is expected behavior for test aircraft."
+
 frontend:
   - task: "Frontend Testing"
     implemented: false
