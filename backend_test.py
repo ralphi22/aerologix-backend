@@ -228,7 +228,21 @@ class AeroLogixBackendTester:
         print("❌ No aircraft found and failed to create test aircraft")
         return None, None
 
-    def test_critical_mentions_endpoint(self):
+    def test_tc_version_endpoint(self):
+        """Test GET /api/tc-adsb/version"""
+        print("📋 Testing TC Version Endpoint...")
+        
+        success, response = self.run_test(
+            "Get TC AD/SB version",
+            "GET",
+            "api/tc-adsb/version",
+            200
+        )
+        
+        if success and 'tc_adsb_version' in response:
+            print(f"✅ TC Version: {response['tc_adsb_version']}")
+            return response['tc_adsb_version']
+        return None
         """Test GET /api/limitations/{aircraft_id}/critical-mentions"""
         print("🔍 Testing Critical Mentions Endpoint...")
         
