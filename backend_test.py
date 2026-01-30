@@ -794,6 +794,7 @@ class AeroLogixBackendTester:
         
         # Run all test suites
         test_suites = [
+            ("Counter Guard Implementation", self.test_counter_guard_implementation),
             ("Critical Mentions Endpoint", self.test_critical_mentions_endpoint),
             ("TC Version Endpoint", self.test_tc_version_endpoint),
             ("Detection Endpoints", self.test_detection_endpoints),
