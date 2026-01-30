@@ -110,6 +110,18 @@ class CollaborativeADSBService:
             return ""
         return re.sub(r'[^A-Z0-9]', '', model.upper())
     
+    def create_aircraft_type_key(self, manufacturer: str, model: str) -> str:
+        """
+        Create CANONICAL aircraft type key.
+        
+        OBLIGATOIRE: aircraft_type_key = normalize(manufacturer) + "::" + normalize(model)
+        
+        NO comparison by user, registration, or serial number.
+        """
+        mfr_norm = self.normalize_manufacturer(manufacturer)
+        model_norm = self.normalize_model(model)
+        return f"{mfr_norm}::{model_norm}"
+    
     def normalize_reference(self, ref: str) -> str:
         """
         Normalize AD/SB reference for matching.
@@ -124,19 +136,24 @@ class CollaborativeADSBService:
         normalized = re.sub(r'[\s\-_.]+', '-', normalized)
         return normalized.strip('-')
     
-    def create_global_key(self, model: str, reference: str) -> str:
-        """Create a unique key for the global reference pool."""
-        model_norm = self.normalize_model(model)
+    def create_global_key(self, manufacturer: str, model: str, reference: str) -> str:
+        """
+        Create a unique key for the global reference pool.
+        
+        Format: aircraft_type_key::reference
+        Example: CESSNA::172M::CF-2024-03
+        """
+        type_key = self.create_aircraft_type_key(manufacturer, model)
         ref_norm = self.normalize_reference(reference)
-        return f"{model_norm}::{ref_norm}"
+        return f"{type_key}::{ref_norm}"
     
     # --------------------------------------------------------
     # GLOBAL REFERENCE POOL
     # --------------------------------------------------------
     
-    async def check_reference_exists(self, model: str, reference: str) -> bool:
-        """Check if a reference already exists in the global pool for this model."""
-        global_key = self.create_global_key(model, reference)
+    async def check_reference_exists(self, manufacturer: str, model: str, reference: str) -> bool:
+        """Check if a reference already exists in the global pool for this aircraft type."""
+        global_key = self.create_global_key(manufacturer, model, reference)
         
         existing = await self.db.tc_adsb_global_references.find_one({
             "global_key": global_key
@@ -146,6 +163,7 @@ class CollaborativeADSBService:
     
     async def add_reference_to_pool(
         self,
+        manufacturer: str,
         model: str,
         reference: str,
         reference_type: str,
@@ -155,10 +173,14 @@ class CollaborativeADSBService:
         """
         Add a reference to the global pool.
         
+        Uses CANONICAL aircraft_type_key = manufacturer::model
+        
         Returns:
             True if added (was new), False if already existed
         """
-        global_key = self.create_global_key(model, reference)
+        global_key = self.create_global_key(manufacturer, model, reference)
+        type_key = self.create_aircraft_type_key(manufacturer, model)
+        mfr_norm = self.normalize_manufacturer(manufacturer)
         model_norm = self.normalize_model(model)
         ref_norm = self.normalize_reference(reference)
         
