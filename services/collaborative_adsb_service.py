@@ -371,26 +371,30 @@ class CollaborativeADSBService:
             reference_type: "AD" or "SB"
             aircraft_id: Source aircraft ID
             user_id: User who imported
+            manufacturer: Aircraft manufacturer
             model: Aircraft model
             
         Returns:
             CollaborativeDetectionResult with counts
         """
+        aircraft_type_key = self.create_aircraft_type_key(manufacturer, model)
+        
         logger.info(
             f"[COLLABORATIVE] Processing {len(references)} references | "
-            f"aircraft={aircraft_id} | model={model} | user={user_id}"
+            f"aircraft_type_key={aircraft_type_key} | aircraft={aircraft_id} | user={user_id}"
         )
         
-        if not references or not model:
-            return CollaborativeDetectionResult()
+        if not references or not aircraft_type_key or aircraft_type_key == "::":
+            return CollaborativeDetectionResult(aircraft_type_key=aircraft_type_key)
         
         new_references = []
         alerts_created = 0
         users_notified: Set[str] = set()
         
-        # Step 1: Check each reference against global pool
+        # Step 1: Check each reference against global pool (by aircraft_type_key)
         for ref in references:
             is_new = await self.add_reference_to_pool(
+                manufacturer=manufacturer,
                 model=model,
                 reference=ref,
                 reference_type=reference_type,
@@ -401,17 +405,18 @@ class CollaborativeADSBService:
             if is_new:
                 new_references.append(ref)
         
-        # Step 2: If new references found, notify other users
+        # Step 2: If new references found, notify other users with same aircraft_type_key
         if new_references:
-            logger.info(f"[COLLABORATIVE] {len(new_references)} NEW references detected for model={model}")
+            logger.info(f"[COLLABORATIVE] {len(new_references)} NEW references detected for type_key={aircraft_type_key}")
             
-            # Find other users with same model
-            other_users = await self.find_users_with_model(
+            # Find other users with same CANONICAL aircraft_type_key
+            other_users = await self.find_users_with_aircraft_type(
+                manufacturer=manufacturer,
                 model=model,
                 exclude_user_id=user_id
             )
             
-            logger.info(f"[COLLABORATIVE] Found {len(other_users)} other users with model {model}")
+            logger.info(f"[COLLABORATIVE] Found {len(other_users)} other users with type_key={aircraft_type_key}")
             
             # Create alerts for each new reference to each user
             for user_info in other_users:
@@ -419,10 +424,10 @@ class CollaborativeADSBService:
                     created = await self.create_alert(
                         user_id=user_info["user_id"],
                         aircraft_id=user_info["aircraft_id"],
+                        manufacturer=manufacturer,
                         model=model,
                         reference=ref,
-                        reference_type=reference_type,
-                        contributed_by=user_id
+                        reference_type=reference_type
                     )
                     
                     if created:
@@ -433,7 +438,8 @@ class CollaborativeADSBService:
             new_references_count=len(new_references),
             alerts_created_count=alerts_created,
             users_notified=len(users_notified),
-            references_added_to_pool=new_references
+            references_added_to_pool=new_references,
+            aircraft_type_key=aircraft_type_key
         )
         
         # Log summary
