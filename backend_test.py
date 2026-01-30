@@ -168,6 +168,32 @@ class AeroLogixBackendTester:
             print(f"❌ Authentication failed. Response: {response}")
             return False
 
+    def create_test_aircraft(self):
+        """Create a test aircraft for testing"""
+        print("✈️ Creating test aircraft...")
+        
+        success, response = self.run_test(
+            "Create test aircraft",
+            "POST",
+            "api/aircraft",
+            201,
+            data={
+                "registration": "C-GTEST",
+                "make": "Cessna",
+                "model": "172",
+                "year": 2020,
+                "serial_number": "TEST123456"
+            }
+        )
+        
+        if success:
+            aircraft_id = response.get('_id') or response.get('id')
+            print(f"✅ Test aircraft created: C-GTEST (ID: {aircraft_id})")
+            return aircraft_id
+        else:
+            print(f"❌ Failed to create test aircraft: {response}")
+            return None
+
     def get_aircraft_list(self):
         """Get list of aircraft for the authenticated user"""
         print("✈️ Getting aircraft list...")
@@ -193,7 +219,13 @@ class AeroLogixBackendTester:
                 print(f"✅ Found aircraft: {registration} (ID: {aircraft_id})")
                 return aircraft_id, registration
         
-        print("❌ No aircraft found or invalid response format")
+        # No aircraft found, try to create one
+        print("ℹ️ No aircraft found, creating test aircraft...")
+        aircraft_id = self.create_test_aircraft()
+        if aircraft_id:
+            return aircraft_id, "C-GTEST"
+        
+        print("❌ No aircraft found and failed to create test aircraft")
         return None, None
 
     def test_critical_mentions_endpoint(self):
