@@ -526,7 +526,7 @@ class AeroLogixBackendTester:
 
     def run_all_tests(self):
         """Run all tests in sequence"""
-        print("🚀 Starting TC AD/SB Detection Backend Tests")
+        print("🚀 Starting AeroLogix AI Backend Tests")
         print("=" * 60)
         
         # Authentication is required for most endpoints
