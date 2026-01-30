@@ -1,19 +1,735 @@
 {
   "summary": {
-    "total_tests": 1,
-    "passed_tests": 0,
-    "success_rate": 0.0,
-    "timestamp": "2026-01-30T00:30:25.227150"
+    "total_tests": 39,
+    "passed_tests": 34,
+    "success_rate": 87.17948717948718,
+    "timestamp": "2026-01-30T02:02:04.936663"
   },
   "detailed_results": [
     {
       "test_name": "Login with test user",
-      "success": false,
-      "details": "Status: 401 (expected 200)",
+      "success": true,
+      "details": "Status: 200",
       "response_data": {
-        "detail": "Incorrect email or password"
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwMzQzMzI0fQ.qfWlIiZUG_6fneEoS-X9dwwkZ0aeO33MXBBbe3IF7BY",
+        "token_type": "bearer",
+        "user": {
+          "email": "test@aerologix.ca",
+          "name": "Test User",
+          "id": "1769733078496887",
+          "created_at": "2026-01-30T00:31:18.739000",
+          "subscription": {
+            "plan_code": "BASIC",
+            "plan": "BASIC",
+            "status": "active",
+            "stripe_customer_id": null,
+            "stripe_subscription_id": null,
+            "trial_end": null,
+            "current_period_end": null
+          },
+          "limits": {
+            "max_aircrafts": 1,
+            "ocr_per_month": 5,
+            "logbook_entries_per_month": 10,
+            "gps_logbook": false,
+            "tea_amo_sharing": false,
+            "invoices": false,
+            "cost_per_hour": false,
+            "prebuy": false,
+            "has_fleet_access": false,
+            "has_mechanic_sharing": false
+          }
+        }
       },
-      "timestamp": "2026-01-30T00:30:25.226952"
+      "timestamp": "2026-01-30T02:02:04.829704"
+    },
+    {
+      "test_name": "Get aircraft list",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": [
+        {
+          "registration": "C-GTEST",
+          "aircraft_type": null,
+          "manufacturer": null,
+          "model": "172",
+          "year": 2020,
+          "serial_number": "TEST123456",
+          "airframe_hours": 2000.0,
+          "engine_hours": 1800.0,
+          "propeller_hours": 1000.0,
+          "photo_url": null,
+          "description": null,
+          "adsb_has_new_tc_items": false,
+          "count_new_adsb": 0,
+          "last_tc_adsb_version": null,
+          "last_adsb_reviewed_at": null,
+          "_id": "1769733120179849",
+          "user_id": "1769733078496887",
+          "created_at": "2026-01-30T00:32:00.179000",
+          "updated_at": "2026-01-30T01:29:45.651000"
+        }
+      ],
+      "timestamp": "2026-01-30T02:02:04.834550"
+    },
+    {
+      "test_name": "Setup aircraft with baseline hours",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "registration": "C-GTEST",
+        "aircraft_type": null,
+        "manufacturer": null,
+        "model": "172",
+        "year": 2020,
+        "serial_number": "TEST123456",
+        "airframe_hours": 1000.0,
+        "engine_hours": 900.0,
+        "propeller_hours": 800.0,
+        "photo_url": null,
+        "description": null,
+        "adsb_has_new_tc_items": false,
+        "count_new_adsb": 0,
+        "last_tc_adsb_version": null,
+        "last_adsb_reviewed_at": null,
+        "_id": "1769733120179849",
+        "user_id": "1769733078496887",
+        "created_at": "2026-01-30T00:32:00.179000",
+        "updated_at": "2026-01-30T02:02:04.838000"
+      },
+      "timestamp": "2026-01-30T02:02:04.839639"
+    },
+    {
+      "test_name": "Update engine_hours > airframe_hours (1200 > 1000)",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "registration": "C-GTEST",
+        "aircraft_type": null,
+        "manufacturer": null,
+        "model": "172",
+        "year": 2020,
+        "serial_number": "TEST123456",
+        "airframe_hours": 1000.0,
+        "engine_hours": 1000.0,
+        "propeller_hours": 800.0,
+        "photo_url": null,
+        "description": null,
+        "adsb_has_new_tc_items": false,
+        "count_new_adsb": 0,
+        "last_tc_adsb_version": null,
+        "last_adsb_reviewed_at": null,
+        "_id": "1769733120179849",
+        "user_id": "1769733078496887",
+        "created_at": "2026-01-30T00:32:00.179000",
+        "updated_at": "2026-01-30T02:02:04.841000"
+      },
+      "timestamp": "2026-01-30T02:02:04.843167"
+    },
+    {
+      "test_name": "Engine hours normalized to airframe",
+      "success": true,
+      "details": "Engine hours correctly normalized from 1200 to 1000.0",
+      "response_data": null,
+      "timestamp": "2026-01-30T02:02:04.843237"
+    },
+    {
+      "test_name": "Update propeller_hours > airframe_hours (1500 > 1000)",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "registration": "C-GTEST",
+        "aircraft_type": null,
+        "manufacturer": null,
+        "model": "172",
+        "year": 2020,
+        "serial_number": "TEST123456",
+        "airframe_hours": 1000.0,
+        "engine_hours": 1000.0,
+        "propeller_hours": 1000.0,
+        "photo_url": null,
+        "description": null,
+        "adsb_has_new_tc_items": false,
+        "count_new_adsb": 0,
+        "last_tc_adsb_version": null,
+        "last_adsb_reviewed_at": null,
+        "_id": "1769733120179849",
+        "user_id": "1769733078496887",
+        "created_at": "2026-01-30T00:32:00.179000",
+        "updated_at": "2026-01-30T02:02:04.845000"
+      },
+      "timestamp": "2026-01-30T02:02:04.846476"
+    },
+    {
+      "test_name": "Propeller hours normalized to airframe",
+      "success": true,
+      "details": "Propeller hours correctly normalized from 1500 to 1000.0",
+      "response_data": null,
+      "timestamp": "2026-01-30T02:02:04.846550"
+    },
+    {
+      "test_name": "Update engine_hours < airframe_hours (500 < 1000)",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "registration": "C-GTEST",
+        "aircraft_type": null,
+        "manufacturer": null,
+        "model": "172",
+        "year": 2020,
+        "serial_number": "TEST123456",
+        "airframe_hours": 1000.0,
+        "engine_hours": 500.0,
+        "propeller_hours": 1000.0,
+        "photo_url": null,
+        "description": null,
+        "adsb_has_new_tc_items": false,
+        "count_new_adsb": 0,
+        "last_tc_adsb_version": null,
+        "last_adsb_reviewed_at": null,
+        "_id": "1769733120179849",
+        "user_id": "1769733078496887",
+        "created_at": "2026-01-30T00:32:00.179000",
+        "updated_at": "2026-01-30T02:02:04.848000"
+      },
+      "timestamp": "2026-01-30T02:02:04.850249"
+    },
+    {
+      "test_name": "Valid engine hours update accepted",
+      "success": true,
+      "details": "Engine hours correctly set to 500.0",
+      "response_data": null,
+      "timestamp": "2026-01-30T02:02:04.850323"
+    },
+    {
+      "test_name": "Update airframe_hours=2000 AND engine_hours=1800",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "registration": "C-GTEST",
+        "aircraft_type": null,
+        "manufacturer": null,
+        "model": "172",
+        "year": 2020,
+        "serial_number": "TEST123456",
+        "airframe_hours": 2000.0,
+        "engine_hours": 1800.0,
+        "propeller_hours": 1000.0,
+        "photo_url": null,
+        "description": null,
+        "adsb_has_new_tc_items": false,
+        "count_new_adsb": 0,
+        "last_tc_adsb_version": null,
+        "last_adsb_reviewed_at": null,
+        "_id": "1769733120179849",
+        "user_id": "1769733078496887",
+        "created_at": "2026-01-30T00:32:00.179000",
+        "updated_at": "2026-01-30T02:02:04.852000"
+      },
+      "timestamp": "2026-01-30T02:02:04.854055"
+    },
+    {
+      "test_name": "Airframe and engine hours update accepted",
+      "success": true,
+      "details": "Airframe: 2000.0, Engine: 1800.0",
+      "response_data": null,
+      "timestamp": "2026-01-30T02:02:04.854126"
+    },
+    {
+      "test_name": "Counter Guard implementation complete",
+      "success": true,
+      "details": "All 4 test scenarios passed: normalization, valid updates, and airframe expansion",
+      "response_data": null,
+      "timestamp": "2026-01-30T02:02:04.854134"
+    },
+    {
+      "test_name": "Get aircraft list",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": [
+        {
+          "registration": "C-GTEST",
+          "aircraft_type": null,
+          "manufacturer": null,
+          "model": "172",
+          "year": 2020,
+          "serial_number": "TEST123456",
+          "airframe_hours": 2000.0,
+          "engine_hours": 1800.0,
+          "propeller_hours": 1000.0,
+          "photo_url": null,
+          "description": null,
+          "adsb_has_new_tc_items": false,
+          "count_new_adsb": 0,
+          "last_tc_adsb_version": null,
+          "last_adsb_reviewed_at": null,
+          "_id": "1769733120179849",
+          "user_id": "1769733078496887",
+          "created_at": "2026-01-30T00:32:00.179000",
+          "updated_at": "2026-01-30T02:02:04.852000"
+        }
+      ],
+      "timestamp": "2026-01-30T02:02:04.856684"
+    },
+    {
+      "test_name": "Get critical mentions for aircraft C-GTEST",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "aircraft_id": "1769733120179849",
+        "registration": "C-GTEST",
+        "critical_mentions": {
+          "elt": [],
+          "avionics": [],
+          "fire_extinguisher": [],
+          "general_limitations": []
+        },
+        "summary": {
+          "elt_count": 0,
+          "avionics_count": 0,
+          "fire_extinguisher_count": 0,
+          "general_limitations_count": 0,
+          "total_count": 0
+        },
+        "disclaimer": "INFORMATIONAL ONLY - Always verify with AME and official records"
+      },
+      "timestamp": "2026-01-30T02:02:04.862287"
+    },
+    {
+      "test_name": "Critical mentions endpoint validation",
+      "success": true,
+      "details": "All validations passed. Total mentions: 0, Categories: {'elt_count': 0, 'avionics_count': 0, 'fire_extinguisher_count': 0, 'general_limitations_count': 0}",
+      "response_data": null,
+      "timestamp": "2026-01-30T02:02:04.862365"
+    },
+    {
+      "test_name": "Get critical mentions for invalid aircraft",
+      "success": true,
+      "details": "Status: 404",
+      "response_data": {
+        "detail": "Aircraft not found"
+      },
+      "timestamp": "2026-01-30T02:02:04.865149"
+    },
+    {
+      "test_name": "Get aircraft list",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": [
+        {
+          "registration": "C-GTEST",
+          "aircraft_type": null,
+          "manufacturer": null,
+          "model": "172",
+          "year": 2020,
+          "serial_number": "TEST123456",
+          "airframe_hours": 2000.0,
+          "engine_hours": 1800.0,
+          "propeller_hours": 1000.0,
+          "photo_url": null,
+          "description": null,
+          "adsb_has_new_tc_items": false,
+          "count_new_adsb": 0,
+          "last_tc_adsb_version": null,
+          "last_adsb_reviewed_at": null,
+          "_id": "1769733120179849",
+          "user_id": "1769733078496887",
+          "created_at": "2026-01-30T00:32:00.179000",
+          "updated_at": "2026-01-30T02:02:04.852000"
+        }
+      ],
+      "timestamp": "2026-01-30T02:02:04.867629"
+    },
+    {
+      "test_name": "Get OCR scan AD/SB for aircraft C-GTEST",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "aircraft_id": "1769733120179849",
+        "registration": "C-GTEST",
+        "items": [],
+        "total_unique_references": 0,
+        "total_ad": 0,
+        "total_sb": 0,
+        "documents_analyzed": 0,
+        "source": "scanned_documents",
+        "disclaimer": "These references were detected by OCR from scanned maintenance documents. This is DOCUMENTARY EVIDENCE ONLY, not a compliance assessment. Verify all information with original documents and a licensed AME."
+      },
+      "timestamp": "2026-01-30T02:02:04.870604"
+    },
+    {
+      "test_name": "OCR scan AD/SB endpoint validation",
+      "success": true,
+      "details": "All validations passed. Items: 0, AD: 0, SB: 0, Documents: 0",
+      "response_data": null,
+      "timestamp": "2026-01-30T02:02:04.870671"
+    },
+    {
+      "test_name": "Get OCR scan AD/SB for invalid aircraft",
+      "success": true,
+      "details": "Status: 404",
+      "response_data": {
+        "detail": "Aircraft not found"
+      },
+      "timestamp": "2026-01-30T02:02:04.873025"
+    },
+    {
+      "test_name": "Get TC AD/SB version",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "tc_adsb_version": "2026-01",
+        "description": "TC AD/SB data version used for detection"
+      },
+      "timestamp": "2026-01-30T02:02:04.874893"
+    },
+    {
+      "test_name": "Trigger detection for user aircraft",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "tc_adsb_version": "2026-01",
+        "detection_timestamp": "2026-01-30T02:02:04.889464+00:00",
+        "total_aircraft_processed": 1,
+        "aircraft_with_new_items": 0,
+        "aircraft_skipped": 1,
+        "total_new_items_found": 0,
+        "results": [
+          {
+            "aircraft_id": "1769733120179849",
+            "registration": "C-GTEST",
+            "designator": null,
+            "new_items_found": false,
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "previous_version": null,
+            "current_version": "2026-01",
+            "skipped": true,
+            "skip_reason": "Aircraft identity not found in TC Registry"
+          }
+        ],
+        "triggered_by": "user:1769733078496887"
+      },
+      "timestamp": "2026-01-30T02:02:04.890130"
+    },
+    {
+      "test_name": "Trigger system-wide detection",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "tc_adsb_version": "2026-01",
+        "detection_timestamp": "2026-01-30T02:02:04.894932+00:00",
+        "total_aircraft_processed": 1,
+        "aircraft_with_new_items": 0,
+        "aircraft_skipped": 1,
+        "total_new_items_found": 0,
+        "results": [
+          {
+            "aircraft_id": "1769733120179849",
+            "registration": "C-GTEST",
+            "designator": null,
+            "new_items_found": false,
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "previous_version": null,
+            "current_version": "2026-01",
+            "skipped": true,
+            "skip_reason": "Aircraft identity not found in TC Registry"
+          }
+        ],
+        "triggered_by": "admin:1769733078496887"
+      },
+      "timestamp": "2026-01-30T02:02:04.895591"
+    },
+    {
+      "test_name": "Trigger scheduled detection",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "tc_adsb_version": "2025-01",
+        "detection_timestamp": "2026-01-30T02:02:04.898921+00:00",
+        "total_aircraft_processed": 1,
+        "aircraft_with_new_items": 0,
+        "aircraft_skipped": 1,
+        "total_new_items_found": 0,
+        "results": [
+          {
+            "aircraft_id": "1769733120179849",
+            "registration": "C-GTEST",
+            "designator": null,
+            "new_items_found": false,
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "previous_version": null,
+            "current_version": "2025-01",
+            "skipped": true,
+            "skip_reason": "Aircraft identity not found in TC Registry"
+          }
+        ],
+        "triggered_by": "scheduled"
+      },
+      "timestamp": "2026-01-30T02:02:04.899329"
+    },
+    {
+      "test_name": "Get alert status for aircraft",
+      "success": false,
+      "details": "Status: 404 (expected 200)",
+      "response_data": {
+        "detail": "Aircraft not found or not authorized"
+      },
+      "timestamp": "2026-01-30T02:02:04.903234"
+    },
+    {
+      "test_name": "Mark AD/SB as reviewed",
+      "success": false,
+      "details": "Status: 404 (expected 200)",
+      "response_data": {
+        "detail": "Aircraft not found or not authorized"
+      },
+      "timestamp": "2026-01-30T02:02:04.906155"
+    },
+    {
+      "test_name": "Verify alert cleared after review",
+      "success": false,
+      "details": "Status: 404 (expected 200)",
+      "response_data": {
+        "detail": "Aircraft not found or not authorized"
+      },
+      "timestamp": "2026-01-30T02:02:04.908678"
+    },
+    {
+      "test_name": "Get audit log entries",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "total": 6,
+        "entries": [
+          {
+            "event_type": "DETECTION_COMPLETED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2025-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "scheduled",
+            "notes": "System-wide: Processed 1 aircraft, 0 with new items",
+            "created_at": "2026-01-30T02:02:04.898000"
+          },
+          {
+            "event_type": "DETECTION_STARTED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2025-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "scheduled",
+            "notes": "System-wide detection started",
+            "created_at": "2026-01-30T02:02:04.896000"
+          },
+          {
+            "event_type": "DETECTION_COMPLETED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "admin:1769733078496887",
+            "notes": "System-wide: Processed 1 aircraft, 0 with new items",
+            "created_at": "2026-01-30T02:02:04.894000"
+          },
+          {
+            "event_type": "DETECTION_STARTED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "admin:1769733078496887",
+            "notes": "System-wide detection started",
+            "created_at": "2026-01-30T02:02:04.892000"
+          },
+          {
+            "event_type": "DETECTION_COMPLETED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "user:1769733078496887",
+            "notes": "Processed 1 aircraft, 0 with new items",
+            "created_at": "2026-01-30T02:02:04.889000"
+          },
+          {
+            "event_type": "DETECTION_STARTED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "user:1769733078496887",
+            "notes": "User detection started for user_id=1769733078496887",
+            "created_at": "2026-01-30T02:02:04.877000"
+          }
+        ]
+      },
+      "timestamp": "2026-01-30T02:02:04.911408"
+    },
+    {
+      "test_name": "Get audit log for specific aircraft",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "total": 0,
+        "entries": []
+      },
+      "timestamp": "2026-01-30T02:02:04.913894"
+    },
+    {
+      "test_name": "Audit log contains entries",
+      "success": true,
+      "details": "Total entries: 6",
+      "response_data": null,
+      "timestamp": "2026-01-30T02:02:04.913951"
+    },
+    {
+      "test_name": "Get aircraft with AD/SB fields",
+      "success": false,
+      "details": "Status: 404 (expected 200)",
+      "response_data": {
+        "detail": "Aircraft not found"
+      },
+      "timestamp": "2026-01-30T02:02:04.916084"
+    },
+    {
+      "test_name": "Trigger detection before auto-clear test",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "tc_adsb_version": "2026-01",
+        "detection_timestamp": "2026-01-30T02:02:04.919907+00:00",
+        "total_aircraft_processed": 1,
+        "aircraft_with_new_items": 0,
+        "aircraft_skipped": 1,
+        "total_new_items_found": 0,
+        "results": [
+          {
+            "aircraft_id": "1769733120179849",
+            "registration": "C-GTEST",
+            "designator": null,
+            "new_items_found": false,
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "previous_version": null,
+            "current_version": "2026-01",
+            "skipped": true,
+            "skip_reason": "Aircraft identity not found in TC Registry"
+          }
+        ],
+        "triggered_by": "user:1769733078496887"
+      },
+      "timestamp": "2026-01-30T02:02:04.920356"
+    },
+    {
+      "test_name": "View structured AD/SB (auto-clear trigger)",
+      "success": false,
+      "details": "Status: 404 (expected 200)",
+      "response_data": {
+        "detail": "Aircraft not found"
+      },
+      "timestamp": "2026-01-30T02:02:04.922758"
+    },
+    {
+      "test_name": "Get TC AD/SB version",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "tc_adsb_version": "2026-01",
+        "description": "TC AD/SB data version used for detection"
+      },
+      "timestamp": "2026-01-30T02:02:04.924573"
+    },
+    {
+      "test_name": "First detection run",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "tc_adsb_version": "2026-01",
+        "detection_timestamp": "2026-01-30T02:02:04.927796+00:00",
+        "total_aircraft_processed": 1,
+        "aircraft_with_new_items": 0,
+        "aircraft_skipped": 1,
+        "total_new_items_found": 0,
+        "results": [
+          {
+            "aircraft_id": "1769733120179849",
+            "registration": "C-GTEST",
+            "designator": null,
+            "new_items_found": false,
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "previous_version": null,
+            "current_version": "2026-01",
+            "skipped": true,
+            "skip_reason": "Aircraft identity not found in TC Registry"
+          }
+        ],
+        "triggered_by": "user:1769733078496887"
+      },
+      "timestamp": "2026-01-30T02:02:04.928238"
+    },
+    {
+      "test_name": "Second detection run (should skip)",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "tc_adsb_version": "2026-01",
+        "detection_timestamp": "2026-01-30T02:02:04.931354+00:00",
+        "total_aircraft_processed": 1,
+        "aircraft_with_new_items": 0,
+        "aircraft_skipped": 1,
+        "total_new_items_found": 0,
+        "results": [
+          {
+            "aircraft_id": "1769733120179849",
+            "registration": "C-GTEST",
+            "designator": null,
+            "new_items_found": false,
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "previous_version": null,
+            "current_version": "2026-01",
+            "skipped": true,
+            "skip_reason": "Aircraft identity not found in TC Registry"
+          }
+        ],
+        "triggered_by": "user:1769733078496887"
+      },
+      "timestamp": "2026-01-30T02:02:04.931724"
+    },
+    {
+      "test_name": "Skip logic works for same version",
+      "success": true,
+      "details": "First run skipped: 1, Second run skipped: 1",
+      "response_data": null,
+      "timestamp": "2026-01-30T02:02:04.931781"
+    },
+    {
+      "test_name": "Get alert for invalid aircraft",
+      "success": true,
+      "details": "Status: 404",
+      "response_data": {
+        "detail": "Aircraft not found or not authorized"
+      },
+      "timestamp": "2026-01-30T02:02:04.933916"
+    },
+    {
+      "test_name": "Mark reviewed for invalid aircraft",
+      "success": true,
+      "details": "Status: 404",
+      "response_data": {
+        "detail": "Aircraft not found or not authorized"
+      },
+      "timestamp": "2026-01-30T02:02:04.936471"
     }
   ]
 }
