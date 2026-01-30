@@ -354,6 +354,10 @@ class AeroLogixBackendTester:
         return success and success_invalid
 
     def test_tc_version_endpoint(self):
+        """Test GET /api/tc-adsb/version"""
+        print("📋 Testing TC Version Endpoint...")
+        
+        success, response = self.run_test(
             "Get TC AD/SB version",
             "GET",
             "api/tc-adsb/version",
