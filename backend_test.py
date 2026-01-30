@@ -946,6 +946,168 @@ class AeroLogixBackendTester:
         
         return success and success_invalid
 
+    def test_tc_vs_ocr_comparison_endpoint(self):
+        """Test TC vs OCR Comparison endpoint"""
+        print("🔍 Testing TC vs OCR Comparison Endpoint...")
+        
+        # Get aircraft ID first
+        aircraft_id, registration = self.get_aircraft_list()
+        
+        if not aircraft_id:
+            self.log_test("TC vs OCR Comparison test setup", False, "No aircraft available for testing")
+            return False
+        
+        # Test the TC vs OCR comparison endpoint
+        success, response = self.run_test(
+            f"Get TC vs OCR comparison for aircraft {registration}",
+            "GET",
+            f"api/adsb/tc-comparison/{aircraft_id}",
+            200
+        )
+        
+        if not success:
+            return False
+        
+        # Validate response structure
+        required_fields = [
+            "aircraft_id", "registration", "items", "total_tc_references",
+            "total_seen", "total_not_seen", "ocr_documents_analyzed", "source", "disclaimer"
+        ]
+        missing_fields = [field for field in required_fields if field not in response]
+        
+        if missing_fields:
+            self.log_test(
+                "TC vs OCR comparison response structure",
+                False,
+                f"Missing required fields: {missing_fields}"
+            )
+            return False
+        
+        # Validate specific field values
+        if response.get("aircraft_id") != aircraft_id:
+            self.log_test(
+                "TC vs OCR comparison aircraft_id validation",
+                False,
+                f"Expected aircraft_id={aircraft_id}, got {response.get('aircraft_id')}"
+            )
+            return False
+        
+        if response.get("source") != "tc_imported_references":
+            self.log_test(
+                "TC vs OCR comparison source validation",
+                False,
+                f"Expected source='tc_imported_references', got {response.get('source')}"
+            )
+            return False
+        
+        # Validate items structure (if any items exist)
+        items = response.get("items", [])
+        if not isinstance(items, list):
+            self.log_test(
+                "TC vs OCR comparison items format",
+                False,
+                f"Items should be an array, got {type(items)}"
+            )
+            return False
+        
+        # Validate each item structure (if items exist)
+        for i, item in enumerate(items):
+            required_item_fields = [
+                "reference", "type", "seen_in_documents", "occurrence_count", "last_seen_date"
+            ]
+            missing_item_fields = [field for field in required_item_fields if field not in item]
+            
+            if missing_item_fields:
+                self.log_test(
+                    f"TC vs OCR comparison item {i} structure",
+                    False,
+                    f"Missing item fields: {missing_item_fields}"
+                )
+                return False
+            
+            # Validate item type
+            if item.get("type") not in ["AD", "SB"]:
+                self.log_test(
+                    f"TC vs OCR comparison item {i} type",
+                    False,
+                    f"Invalid type: {item.get('type')}, expected 'AD' or 'SB'"
+                )
+                return False
+            
+            # Validate seen_in_documents is boolean
+            if not isinstance(item.get("seen_in_documents"), bool):
+                self.log_test(
+                    f"TC vs OCR comparison item {i} seen_in_documents",
+                    False,
+                    f"seen_in_documents should be boolean, got {type(item.get('seen_in_documents'))}"
+                )
+                return False
+            
+            # Validate occurrence_count is non-negative integer
+            if not isinstance(item.get("occurrence_count"), int) or item.get("occurrence_count") < 0:
+                self.log_test(
+                    f"TC vs OCR comparison item {i} occurrence_count",
+                    False,
+                    f"Invalid occurrence_count: {item.get('occurrence_count')}"
+                )
+                return False
+        
+        # Validate count consistency: total_seen + total_not_seen = total_tc_references
+        total_seen = response.get("total_seen", 0)
+        total_not_seen = response.get("total_not_seen", 0)
+        total_tc_references = response.get("total_tc_references", 0)
+        
+        if total_seen + total_not_seen != total_tc_references:
+            self.log_test(
+                "TC vs OCR comparison count consistency",
+                False,
+                f"total_seen({total_seen}) + total_not_seen({total_not_seen}) != total_tc_references({total_tc_references})"
+            )
+            return False
+        
+        # Validate that total_tc_references matches items count
+        if total_tc_references != len(items):
+            self.log_test(
+                "TC vs OCR comparison total_tc_references count",
+                False,
+                f"Expected total_tc_references={len(items)}, got {total_tc_references}"
+            )
+            return False
+        
+        # Validate disclaimer exists
+        if not response.get("disclaimer"):
+            self.log_test(
+                "TC vs OCR comparison disclaimer",
+                False,
+                "Disclaimer field is missing or empty"
+            )
+            return False
+        
+        # Log successful validation
+        self.log_test(
+            "TC vs OCR comparison endpoint validation",
+            True,
+            f"All validations passed. TC refs: {total_tc_references}, Seen: {total_seen}, Not seen: {total_not_seen}, OCR docs: {response.get('ocr_documents_analyzed', 0)}"
+        )
+        
+        # Test with invalid aircraft ID
+        success_invalid, response_invalid = self.run_test(
+            "Get TC vs OCR comparison for invalid aircraft",
+            "GET",
+            "api/adsb/tc-comparison/invalid_aircraft_id",
+            404
+        )
+        
+        if not success_invalid:
+            self.log_test(
+                "TC vs OCR comparison invalid aircraft test",
+                False,
+                "Expected 404 for invalid aircraft_id"
+            )
+            return False
+        
+        return success and success_invalid
+
     def run_all_tests(self):
         """Run all tests in sequence"""
         print("🚀 Starting AeroLogix AI Backend Tests")
