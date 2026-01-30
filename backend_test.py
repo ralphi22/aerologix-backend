@@ -1123,6 +1123,7 @@ class AeroLogixBackendTester:
             ("Counter Guard Implementation", self.test_counter_guard_implementation),
             ("Critical Mentions Endpoint", self.test_critical_mentions_endpoint),
             ("OCR Scan AD/SB Endpoint", self.test_ocr_scan_adsb_endpoint),
+            ("TC vs OCR Comparison Endpoint", self.test_tc_vs_ocr_comparison_endpoint),
             ("TC Version Endpoint", self.test_tc_version_endpoint),
             ("Detection Endpoints", self.test_detection_endpoints),
             ("Alert Management", self.test_alert_management),
