@@ -369,28 +369,32 @@ class TCPDFImportService:
                     user_id=user_id
                 )
             
-            # Step 5: Collaborative detection - notify other users with same model
+            # Step 5: Collaborative detection - notify other users with same aircraft type
+            # Uses CANONICAL key: aircraft_type_key = manufacturer::model
             if references and refs_created > 0:
                 try:
                     from services.collaborative_adsb_service import CollaborativeADSBService
                     
-                    # Get aircraft model for collaborative detection
+                    # Get aircraft manufacturer and model for collaborative detection
                     aircraft = await self.db.aircrafts.find_one({"_id": aircraft_id})
+                    manufacturer = aircraft.get("manufacturer", "") if aircraft else ""
                     model = aircraft.get("model", "") if aircraft else ""
                     
-                    if model:
+                    if manufacturer and model:
                         collab_service = CollaborativeADSBService(self.db)
                         collab_result = await collab_service.process_imported_references(
                             references=references,
                             reference_type="AD",  # TC PDF imports are always AD
                             aircraft_id=aircraft_id,
                             user_id=user_id,
+                            manufacturer=manufacturer,
                             model=model
                         )
                         
                         if collab_result.new_references_count > 0:
                             logger.info(
-                                f"[TC PDF IMPORT] Collaborative: {collab_result.new_references_count} new refs, "
+                                f"[TC PDF IMPORT] Collaborative: type_key={collab_result.aircraft_type_key} | "
+                                f"{collab_result.new_references_count} new refs, "
                                 f"{collab_result.alerts_created_count} alerts, "
                                 f"{collab_result.users_notified} users notified"
                             )
