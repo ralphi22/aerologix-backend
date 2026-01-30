@@ -298,6 +298,7 @@ class LimitationDetectorService:
             (AVIONICS_PATTERNS, LimitationCategory.AVIONICS),
             (PROPELLER_PATTERNS, LimitationCategory.PROPELLER),
             (ENGINE_PATTERNS, LimitationCategory.ENGINE),
+            (FIRE_EXTINGUISHER_PATTERNS, LimitationCategory.FIRE_EXTINGUISHER),
             (GENERAL_PATTERNS, LimitationCategory.GENERAL),
         ]
         
