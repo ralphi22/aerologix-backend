@@ -23,6 +23,18 @@ backend:
         agent: "testing"
         comment: "✅ Counter Guard implementation fully tested and working perfectly. All 4 test scenarios passed: (1) Engine hours > airframe normalized from 1200 to 1000, (2) Propeller hours > airframe normalized from 1500 to 1000, (3) Valid engine hours update (500 < 1000) accepted correctly, (4) Airframe update to 2000 allows engine hours of 1800. Server logs confirm [COUNTER_GUARD] warnings are generated during normalization. Silent normalization works as expected with no HTTP errors (200 OK responses). API responses reflect normalized values correctly."
 
+  - task: "OCR Scan AD/SB Aggregation Endpoint"
+    implemented: true
+    working: true
+    file: "/app/routes/adsb.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ GET /api/adsb/ocr-scan/{aircraft_id} endpoint fully tested and working. All validations passed: (1) Returns 200 OK with correct response structure, (2) All required fields present (aircraft_id, registration, items, total_unique_references, total_ad, total_sb, documents_analyzed, source, disclaimer), (3) Source field correctly set to 'scanned_documents', (4) Items array structure validated with proper AD/SB type classification, (5) Count fields match actual items, (6) 404 error handling for invalid aircraft_id works correctly. Empty items array returned when no OCR scans exist, which is expected behavior for test aircraft."
+
 frontend:
   - task: "Frontend Testing"
     implemented: false
