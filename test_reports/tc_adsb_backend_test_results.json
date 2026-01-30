@@ -1,9 +1,9 @@
 {
   "summary": {
-    "total_tests": 43,
-    "passed_tests": 38,
-    "success_rate": 88.37209302325581,
-    "timestamp": "2026-01-30T02:15:06.226311"
+    "total_tests": 56,
+    "passed_tests": 51,
+    "success_rate": 91.07142857142857,
+    "timestamp": "2026-01-30T13:53:52.449184"
   },
   "detailed_results": [
     {
@@ -11,7 +11,7 @@
       "success": true,
       "details": "Status: 200",
       "response_data": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwMzQ0MTA2fQ.E71Z-0IgahOxyew6boNOv6Jjqcd8l4Pt5Yt2T76seTk",
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwMzg2MDMyfQ.R5ImasP43THsbQlArwb4uoXj3k2C3uKTbc-9lGlO9Go",
         "token_type": "bearer",
         "user": {
           "email": "test@aerologix.ca",
@@ -41,7 +41,7 @@
           }
         }
       },
-      "timestamp": "2026-01-30T02:15:06.137227"
+      "timestamp": "2026-01-30T13:53:52.346246"
     },
     {
       "test_name": "Get aircraft list",
@@ -67,10 +67,71 @@
           "_id": "1769733120179849",
           "user_id": "1769733078496887",
           "created_at": "2026-01-30T00:32:00.179000",
-          "updated_at": "2026-01-30T02:02:04.852000"
+          "updated_at": "2026-01-30T02:15:06.155000"
         }
       ],
-      "timestamp": "2026-01-30T02:15:06.140959"
+      "timestamp": "2026-01-30T13:53:52.353518"
+    },
+    {
+      "test_name": "Get TC references for aircraft C-GTEST",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "aircraft_id": "1769733120179849",
+        "total_count": 0,
+        "references": []
+      },
+      "timestamp": "2026-01-30T13:53:52.357685"
+    },
+    {
+      "test_name": "TC references list validation",
+      "success": true,
+      "details": "All validations passed. Total references: 0, New flags present: has_user_pdf, can_delete, can_open_pdf",
+      "response_data": null,
+      "timestamp": "2026-01-30T13:53:52.357753"
+    },
+    {
+      "test_name": "TC reference delete test",
+      "success": true,
+      "details": "No references available for deletion testing (expected for new system)",
+      "response_data": null,
+      "timestamp": "2026-01-30T13:53:52.357762"
+    },
+    {
+      "test_name": "TC PDF endpoint test",
+      "success": true,
+      "details": "No references available for PDF testing (expected for new system)",
+      "response_data": null,
+      "timestamp": "2026-01-30T13:53:52.357769"
+    },
+    {
+      "test_name": "Get aircraft list",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": [
+        {
+          "registration": "C-GTEST",
+          "aircraft_type": null,
+          "manufacturer": null,
+          "model": "172",
+          "year": 2020,
+          "serial_number": "TEST123456",
+          "airframe_hours": 2000.0,
+          "engine_hours": 1800.0,
+          "propeller_hours": 1000.0,
+          "photo_url": null,
+          "description": null,
+          "adsb_has_new_tc_items": false,
+          "count_new_adsb": 0,
+          "last_tc_adsb_version": null,
+          "last_adsb_reviewed_at": null,
+          "_id": "1769733120179849",
+          "user_id": "1769733078496887",
+          "created_at": "2026-01-30T00:32:00.179000",
+          "updated_at": "2026-01-30T02:15:06.155000"
+        }
+      ],
+      "timestamp": "2026-01-30T13:53:52.360067"
     },
     {
       "test_name": "Setup aircraft with baseline hours",
@@ -95,9 +156,9 @@
         "_id": "1769733120179849",
         "user_id": "1769733078496887",
         "created_at": "2026-01-30T00:32:00.179000",
-        "updated_at": "2026-01-30T02:15:06.143000"
+        "updated_at": "2026-01-30T13:53:52.362000"
       },
-      "timestamp": "2026-01-30T02:15:06.144463"
+      "timestamp": "2026-01-30T13:53:52.363100"
     },
     {
       "test_name": "Update engine_hours > airframe_hours (1200 > 1000)",
@@ -122,16 +183,16 @@
         "_id": "1769733120179849",
         "user_id": "1769733078496887",
         "created_at": "2026-01-30T00:32:00.179000",
-        "updated_at": "2026-01-30T02:15:06.146000"
+        "updated_at": "2026-01-30T13:53:52.364000"
       },
-      "timestamp": "2026-01-30T02:15:06.147589"
+      "timestamp": "2026-01-30T13:53:52.365854"
     },
     {
       "test_name": "Engine hours normalized to airframe",
       "success": true,
       "details": "Engine hours correctly normalized from 1200 to 1000.0",
       "response_data": null,
-      "timestamp": "2026-01-30T02:15:06.147657"
+      "timestamp": "2026-01-30T13:53:52.365918"
     },
     {
       "test_name": "Update propeller_hours > airframe_hours (1500 > 1000)",
@@ -156,16 +217,16 @@
         "_id": "1769733120179849",
         "user_id": "1769733078496887",
         "created_at": "2026-01-30T00:32:00.179000",
-        "updated_at": "2026-01-30T02:15:06.149000"
+        "updated_at": "2026-01-30T13:53:52.367000"
       },
-      "timestamp": "2026-01-30T02:15:06.150486"
+      "timestamp": "2026-01-30T13:53:52.368523"
     },
     {
       "test_name": "Propeller hours normalized to airframe",
       "success": true,
       "details": "Propeller hours correctly normalized from 1500 to 1000.0",
       "response_data": null,
-      "timestamp": "2026-01-30T02:15:06.150556"
+      "timestamp": "2026-01-30T13:53:52.368585"
     },
     {
       "test_name": "Update engine_hours < airframe_hours (500 < 1000)",
@@ -190,16 +251,16 @@
         "_id": "1769733120179849",
         "user_id": "1769733078496887",
         "created_at": "2026-01-30T00:32:00.179000",
-        "updated_at": "2026-01-30T02:15:06.152000"
+        "updated_at": "2026-01-30T13:53:52.370000"
       },
-      "timestamp": "2026-01-30T02:15:06.153241"
+      "timestamp": "2026-01-30T13:53:52.371219"
     },
     {
       "test_name": "Valid engine hours update accepted",
       "success": true,
       "details": "Engine hours correctly set to 500.0",
       "response_data": null,
-      "timestamp": "2026-01-30T02:15:06.153307"
+      "timestamp": "2026-01-30T13:53:52.371283"
     },
     {
       "test_name": "Update airframe_hours=2000 AND engine_hours=1800",
@@ -224,23 +285,23 @@
         "_id": "1769733120179849",
         "user_id": "1769733078496887",
         "created_at": "2026-01-30T00:32:00.179000",
-        "updated_at": "2026-01-30T02:15:06.155000"
+        "updated_at": "2026-01-30T13:53:52.372000"
       },
-      "timestamp": "2026-01-30T02:15:06.156129"
+      "timestamp": "2026-01-30T13:53:52.373750"
     },
     {
       "test_name": "Airframe and engine hours update accepted",
       "success": true,
       "details": "Airframe: 2000.0, Engine: 1800.0",
       "response_data": null,
-      "timestamp": "2026-01-30T02:15:06.156190"
+      "timestamp": "2026-01-30T13:53:52.373810"
     },
     {
       "test_name": "Counter Guard implementation complete",
       "success": true,
       "details": "All 4 test scenarios passed: normalization, valid updates, and airframe expansion",
       "response_data": null,
-      "timestamp": "2026-01-30T02:15:06.156200"
+      "timestamp": "2026-01-30T13:53:52.373820"
     },
     {
       "test_name": "Get aircraft list",
@@ -266,10 +327,10 @@
           "_id": "1769733120179849",
           "user_id": "1769733078496887",
           "created_at": "2026-01-30T00:32:00.179000",
-          "updated_at": "2026-01-30T02:15:06.155000"
+          "updated_at": "2026-01-30T13:53:52.372000"
         }
       ],
-      "timestamp": "2026-01-30T02:15:06.158490"
+      "timestamp": "2026-01-30T13:53:52.375707"
     },
     {
       "test_name": "Get critical mentions for aircraft C-GTEST",
@@ -293,14 +354,14 @@
         },
         "disclaimer": "INFORMATIONAL ONLY - Always verify with AME and official records"
       },
-      "timestamp": "2026-01-30T02:15:06.162599"
+      "timestamp": "2026-01-30T13:53:52.378899"
     },
     {
       "test_name": "Critical mentions endpoint validation",
       "success": true,
       "details": "All validations passed. Total mentions: 0, Categories: {'elt_count': 0, 'avionics_count': 0, 'fire_extinguisher_count': 0, 'general_limitations_count': 0}",
       "response_data": null,
-      "timestamp": "2026-01-30T02:15:06.162676"
+      "timestamp": "2026-01-30T13:53:52.378971"
     },
     {
       "test_name": "Get critical mentions for invalid aircraft",
@@ -309,7 +370,7 @@
       "response_data": {
         "detail": "Aircraft not found"
       },
-      "timestamp": "2026-01-30T02:15:06.165020"
+      "timestamp": "2026-01-30T13:53:52.381026"
     },
     {
       "test_name": "Get aircraft list",
@@ -335,10 +396,10 @@
           "_id": "1769733120179849",
           "user_id": "1769733078496887",
           "created_at": "2026-01-30T00:32:00.179000",
-          "updated_at": "2026-01-30T02:15:06.155000"
+          "updated_at": "2026-01-30T13:53:52.372000"
         }
       ],
-      "timestamp": "2026-01-30T02:15:06.167231"
+      "timestamp": "2026-01-30T13:53:52.382928"
     },
     {
       "test_name": "Get OCR scan AD/SB for aircraft C-GTEST",
@@ -355,14 +416,14 @@
         "source": "scanned_documents",
         "disclaimer": "These references were detected by OCR from scanned maintenance documents. This is DOCUMENTARY EVIDENCE ONLY, not a compliance assessment. Verify all information with original documents and a licensed AME."
       },
-      "timestamp": "2026-01-30T02:15:06.169937"
+      "timestamp": "2026-01-30T13:53:52.385152"
     },
     {
       "test_name": "OCR scan AD/SB endpoint validation",
       "success": true,
       "details": "All validations passed. Items: 0, AD: 0, SB: 0, Documents: 0",
       "response_data": null,
-      "timestamp": "2026-01-30T02:15:06.170006"
+      "timestamp": "2026-01-30T13:53:52.385214"
     },
     {
       "test_name": "Get OCR scan AD/SB for invalid aircraft",
@@ -371,7 +432,7 @@
       "response_data": {
         "detail": "Aircraft not found"
       },
-      "timestamp": "2026-01-30T02:15:06.172178"
+      "timestamp": "2026-01-30T13:53:52.387167"
     },
     {
       "test_name": "Get aircraft list",
@@ -397,10 +458,10 @@
           "_id": "1769733120179849",
           "user_id": "1769733078496887",
           "created_at": "2026-01-30T00:32:00.179000",
-          "updated_at": "2026-01-30T02:15:06.155000"
+          "updated_at": "2026-01-30T13:53:52.372000"
         }
       ],
-      "timestamp": "2026-01-30T02:15:06.174642"
+      "timestamp": "2026-01-30T13:53:52.389088"
     },
     {
       "test_name": "Get TC vs OCR comparison for aircraft C-GTEST",
@@ -417,14 +478,14 @@
         "source": "tc_imported_references",
         "disclaimer": "This comparison shows which TC AD/SB references have been detected in scanned maintenance documents. This is DOCUMENTARY VISIBILITY ONLY, not a compliance assessment. Verify with original documents and a licensed AME."
       },
-      "timestamp": "2026-01-30T02:15:06.177760"
+      "timestamp": "2026-01-30T13:53:52.391457"
     },
     {
       "test_name": "TC vs OCR comparison endpoint validation",
       "success": true,
       "details": "All validations passed. TC refs: 0, Seen: 0, Not seen: 0, OCR docs: 0",
       "response_data": null,
-      "timestamp": "2026-01-30T02:15:06.177830"
+      "timestamp": "2026-01-30T13:53:52.391518"
     },
     {
       "test_name": "Get TC vs OCR comparison for invalid aircraft",
@@ -433,7 +494,77 @@
       "response_data": {
         "detail": "Aircraft not found"
       },
-      "timestamp": "2026-01-30T02:15:06.180040"
+      "timestamp": "2026-01-30T13:53:52.393372"
+    },
+    {
+      "test_name": "Get AD/SB alerts list",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "alerts": [],
+        "total_count": 0,
+        "unread_count": 0
+      },
+      "timestamp": "2026-01-30T13:53:52.395997"
+    },
+    {
+      "test_name": "AD/SB alerts list validation",
+      "success": true,
+      "details": "All validations passed. Total alerts: 0, Unread: 0",
+      "response_data": null,
+      "timestamp": "2026-01-30T13:53:52.396059"
+    },
+    {
+      "test_name": "Get AD/SB alert counts",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "unread_count": 0,
+        "total_count": 0
+      },
+      "timestamp": "2026-01-30T13:53:52.398239"
+    },
+    {
+      "test_name": "AD/SB alert counts validation",
+      "success": true,
+      "details": "Count endpoint working. Unread: 0, Total: 0",
+      "response_data": null,
+      "timestamp": "2026-01-30T13:53:52.398309"
+    },
+    {
+      "test_name": "Get AD/SB global statistics",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "total_global_references": 0,
+        "total_alerts_created": 0,
+        "top_models": [],
+        "disclaimer": "TC-SAFE: Statistics only, no compliance inference"
+      },
+      "timestamp": "2026-01-30T13:53:52.400841"
+    },
+    {
+      "test_name": "AD/SB global stats validation",
+      "success": true,
+      "details": "All validations passed. Global refs: 0, Alerts created: 0, Top models: 0",
+      "response_data": null,
+      "timestamp": "2026-01-30T13:53:52.400902"
+    },
+    {
+      "test_name": "Alert management tests",
+      "success": true,
+      "details": "No alerts available for management testing (expected for new system)",
+      "response_data": null,
+      "timestamp": "2026-01-30T13:53:52.400911"
+    },
+    {
+      "test_name": "Mark invalid alert as read",
+      "success": true,
+      "details": "Status: 400",
+      "response_data": {
+        "detail": "Invalid alert_id"
+      },
+      "timestamp": "2026-01-30T13:53:52.402650"
     },
     {
       "test_name": "Get TC AD/SB version",
@@ -443,7 +574,7 @@
         "tc_adsb_version": "2026-01",
         "description": "TC AD/SB data version used for detection"
       },
-      "timestamp": "2026-01-30T02:15:06.181710"
+      "timestamp": "2026-01-30T13:53:52.404157"
     },
     {
       "test_name": "Trigger detection for user aircraft",
@@ -451,7 +582,7 @@
       "details": "Status: 200",
       "response_data": {
         "tc_adsb_version": "2026-01",
-        "detection_timestamp": "2026-01-30T02:15:06.185068+00:00",
+        "detection_timestamp": "2026-01-30T13:53:52.411979+00:00",
         "total_aircraft_processed": 1,
         "aircraft_with_new_items": 0,
         "aircraft_skipped": 1,
@@ -472,7 +603,7 @@
         ],
         "triggered_by": "user:1769733078496887"
       },
-      "timestamp": "2026-01-30T02:15:06.185497"
+      "timestamp": "2026-01-30T13:53:52.412414"
     },
     {
       "test_name": "Trigger system-wide detection",
@@ -480,7 +611,7 @@
       "details": "Status: 200",
       "response_data": {
         "tc_adsb_version": "2026-01",
-        "detection_timestamp": "2026-01-30T02:15:06.188977+00:00",
+        "detection_timestamp": "2026-01-30T13:53:52.415470+00:00",
         "total_aircraft_processed": 1,
         "aircraft_with_new_items": 0,
         "aircraft_skipped": 1,
@@ -501,7 +632,7 @@
         ],
         "triggered_by": "admin:1769733078496887"
       },
-      "timestamp": "2026-01-30T02:15:06.189383"
+      "timestamp": "2026-01-30T13:53:52.415841"
     },
     {
       "test_name": "Trigger scheduled detection",
@@ -509,7 +640,7 @@
       "details": "Status: 200",
       "response_data": {
         "tc_adsb_version": "2025-01",
-        "detection_timestamp": "2026-01-30T02:15:06.191903+00:00",
+        "detection_timestamp": "2026-01-30T13:53:52.418122+00:00",
         "total_aircraft_processed": 1,
         "aircraft_with_new_items": 0,
         "aircraft_skipped": 1,
@@ -530,7 +661,7 @@
         ],
         "triggered_by": "scheduled"
       },
-      "timestamp": "2026-01-30T02:15:06.192338"
+      "timestamp": "2026-01-30T13:53:52.418475"
     },
     {
       "test_name": "Get alert status for aircraft",
@@ -539,7 +670,7 @@
       "response_data": {
         "detail": "Aircraft not found or not authorized"
       },
-      "timestamp": "2026-01-30T02:15:06.194650"
+      "timestamp": "2026-01-30T13:53:52.420549"
     },
     {
       "test_name": "Mark AD/SB as reviewed",
@@ -548,7 +679,7 @@
       "response_data": {
         "detail": "Aircraft not found or not authorized"
       },
-      "timestamp": "2026-01-30T02:15:06.196914"
+      "timestamp": "2026-01-30T13:53:52.422582"
     },
     {
       "test_name": "Verify alert cleared after review",
@@ -557,15 +688,147 @@
       "response_data": {
         "detail": "Aircraft not found or not authorized"
       },
-      "timestamp": "2026-01-30T02:15:06.199238"
+      "timestamp": "2026-01-30T13:53:52.424566"
     },
     {
       "test_name": "Get audit log entries",
       "success": true,
       "details": "Status: 200",
       "response_data": {
-        "total": 18,
+        "total": 30,
         "entries": [
+          {
+            "event_type": "DETECTION_COMPLETED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2025-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "scheduled",
+            "notes": "System-wide: Processed 1 aircraft, 0 with new items",
+            "created_at": "2026-01-30T13:53:52.417000"
+          },
+          {
+            "event_type": "DETECTION_STARTED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2025-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "scheduled",
+            "notes": "System-wide detection started",
+            "created_at": "2026-01-30T13:53:52.416000"
+          },
+          {
+            "event_type": "DETECTION_COMPLETED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "admin:1769733078496887",
+            "notes": "System-wide: Processed 1 aircraft, 0 with new items",
+            "created_at": "2026-01-30T13:53:52.415000"
+          },
+          {
+            "event_type": "DETECTION_STARTED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "admin:1769733078496887",
+            "notes": "System-wide detection started",
+            "created_at": "2026-01-30T13:53:52.414000"
+          },
+          {
+            "event_type": "DETECTION_COMPLETED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "user:1769733078496887",
+            "notes": "Processed 1 aircraft, 0 with new items",
+            "created_at": "2026-01-30T13:53:52.411000"
+          },
+          {
+            "event_type": "DETECTION_STARTED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "user:1769733078496887",
+            "notes": "User detection started for user_id=1769733078496887",
+            "created_at": "2026-01-30T13:53:52.405000"
+          },
+          {
+            "event_type": "DETECTION_COMPLETED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "user:1769733078496887",
+            "notes": "Processed 1 aircraft, 0 with new items",
+            "created_at": "2026-01-30T02:15:06.220000"
+          },
+          {
+            "event_type": "DETECTION_STARTED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "user:1769733078496887",
+            "notes": "User detection started for user_id=1769733078496887",
+            "created_at": "2026-01-30T02:15:06.219000"
+          },
+          {
+            "event_type": "DETECTION_COMPLETED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "user:1769733078496887",
+            "notes": "Processed 1 aircraft, 0 with new items",
+            "created_at": "2026-01-30T02:15:06.216000"
+          },
+          {
+            "event_type": "DETECTION_STARTED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "user:1769733078496887",
+            "notes": "User detection started for user_id=1769733078496887",
+            "created_at": "2026-01-30T02:15:06.215000"
+          },
+          {
+            "event_type": "DETECTION_COMPLETED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "user:1769733078496887",
+            "notes": "Processed 1 aircraft, 0 with new items",
+            "created_at": "2026-01-30T02:15:06.209000"
+          },
+          {
+            "event_type": "DETECTION_STARTED",
+            "aircraft_id": null,
+            "registration": null,
+            "tc_adsb_version": "2026-01",
+            "new_items_count": 0,
+            "new_items_refs": [],
+            "triggered_by": "user:1769733078496887",
+            "notes": "User detection started for user_id=1769733078496887",
+            "created_at": "2026-01-30T02:15:06.208000"
+          },
           {
             "event_type": "DETECTION_COMPLETED",
             "aircraft_id": null,
@@ -766,7 +1029,7 @@
           }
         ]
       },
-      "timestamp": "2026-01-30T02:15:06.202149"
+      "timestamp": "2026-01-30T13:53:52.427572"
     },
     {
       "test_name": "Get audit log for specific aircraft",
@@ -776,14 +1039,14 @@
         "total": 0,
         "entries": []
       },
-      "timestamp": "2026-01-30T02:15:06.204376"
+      "timestamp": "2026-01-30T13:53:52.429742"
     },
     {
       "test_name": "Audit log contains entries",
       "success": true,
-      "details": "Total entries: 18",
+      "details": "Total entries: 30",
       "response_data": null,
-      "timestamp": "2026-01-30T02:15:06.204425"
+      "timestamp": "2026-01-30T13:53:52.429797"
     },
     {
       "test_name": "Get aircraft with AD/SB fields",
@@ -792,7 +1055,7 @@
       "response_data": {
         "detail": "Aircraft not found"
       },
-      "timestamp": "2026-01-30T02:15:06.206466"
+      "timestamp": "2026-01-30T13:53:52.431574"
     },
     {
       "test_name": "Trigger detection before auto-clear test",
@@ -800,7 +1063,7 @@
       "details": "Status: 200",
       "response_data": {
         "tc_adsb_version": "2026-01",
-        "detection_timestamp": "2026-01-30T02:15:06.209873+00:00",
+        "detection_timestamp": "2026-01-30T13:53:52.434830+00:00",
         "total_aircraft_processed": 1,
         "aircraft_with_new_items": 0,
         "aircraft_skipped": 1,
@@ -821,7 +1084,7 @@
         ],
         "triggered_by": "user:1769733078496887"
       },
-      "timestamp": "2026-01-30T02:15:06.210264"
+      "timestamp": "2026-01-30T13:53:52.435209"
     },
     {
       "test_name": "View structured AD/SB (auto-clear trigger)",
@@ -830,7 +1093,7 @@
       "response_data": {
         "detail": "Aircraft not found"
       },
-      "timestamp": "2026-01-30T02:15:06.212479"
+      "timestamp": "2026-01-30T13:53:52.437190"
     },
     {
       "test_name": "Get TC AD/SB version",
@@ -840,7 +1103,7 @@
         "tc_adsb_version": "2026-01",
         "description": "TC AD/SB data version used for detection"
       },
-      "timestamp": "2026-01-30T02:15:06.214101"
+      "timestamp": "2026-01-30T13:53:52.438722"
     },
     {
       "test_name": "First detection run",
@@ -848,7 +1111,7 @@
       "details": "Status: 200",
       "response_data": {
         "tc_adsb_version": "2026-01",
-        "detection_timestamp": "2026-01-30T02:15:06.216971+00:00",
+        "detection_timestamp": "2026-01-30T13:53:52.441338+00:00",
         "total_aircraft_processed": 1,
         "aircraft_with_new_items": 0,
         "aircraft_skipped": 1,
@@ -869,7 +1132,7 @@
         ],
         "triggered_by": "user:1769733078496887"
       },
-      "timestamp": "2026-01-30T02:15:06.217379"
+      "timestamp": "2026-01-30T13:53:52.441701"
     },
     {
       "test_name": "Second detection run (should skip)",
@@ -877,7 +1140,7 @@
       "details": "Status: 200",
       "response_data": {
         "tc_adsb_version": "2026-01",
-        "detection_timestamp": "2026-01-30T02:15:06.220762+00:00",
+        "detection_timestamp": "2026-01-30T13:53:52.444449+00:00",
         "total_aircraft_processed": 1,
         "aircraft_with_new_items": 0,
         "aircraft_skipped": 1,
@@ -898,14 +1161,14 @@
         ],
         "triggered_by": "user:1769733078496887"
       },
-      "timestamp": "2026-01-30T02:15:06.221193"
+      "timestamp": "2026-01-30T13:53:52.444807"
     },
     {
       "test_name": "Skip logic works for same version",
       "success": true,
       "details": "First run skipped: 1, Second run skipped: 1",
       "response_data": null,
-      "timestamp": "2026-01-30T02:15:06.221252"
+      "timestamp": "2026-01-30T13:53:52.444863"
     },
     {
       "test_name": "Get alert for invalid aircraft",
@@ -914,7 +1177,7 @@
       "response_data": {
         "detail": "Aircraft not found or not authorized"
       },
-      "timestamp": "2026-01-30T02:15:06.223703"
+      "timestamp": "2026-01-30T13:53:52.446939"
     },
     {
       "test_name": "Mark reviewed for invalid aircraft",
@@ -923,7 +1186,7 @@
       "response_data": {
         "detail": "Aircraft not found or not authorized"
       },
-      "timestamp": "2026-01-30T02:15:06.226103"
+      "timestamp": "2026-01-30T13:53:52.448992"
     }
   ]
 }
