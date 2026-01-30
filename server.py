@@ -72,6 +72,7 @@ app.include_router(revenuecat.router)
 app.include_router(tc_adsb_detection.router)
 app.include_router(legal.router)  # Public legal pages (no /api prefix)
 app.include_router(tc_import.router)  # TC PDF import routes
+app.include_router(collaborative_alerts.router)  # Collaborative AD/SB alerts
 
 @app.get("/")
 async def root():
