@@ -96,11 +96,39 @@ class AeroLogixBackendTester:
             self.log_test(name, False, f"Error: {str(e)}")
             return False, {}
 
+    def create_test_user(self):
+        """Create a test user if it doesn't exist"""
+        print("👤 Creating test user...")
+        
+        # Try to create a test user
+        success, response = self.run_test(
+            "Create test user",
+            "POST",
+            "api/auth/signup",
+            200,
+            data={
+                "email": "test@aerologix.ca",
+                "password": "password123",
+                "name": "Test User"
+            }
+        )
+        
+        if success and 'access_token' in response:
+            self.token = response['access_token']
+            print(f"✅ Test user created and authenticated")
+            return True
+        elif not success and "Email already registered" in str(response):
+            print("ℹ️ Test user already exists, proceeding with login")
+            return True
+        else:
+            print(f"❌ Failed to create test user: {response}")
+            return False
+
     def test_authentication(self):
-        """Test login with seeded test user"""
+        """Test login with test user, create if needed"""
         print("🔐 Testing Authentication...")
         
-        # Test login with form-data (OAuth2PasswordRequestForm)
+        # First try to login
         success, response = self.run_test(
             "Login with test user",
             "POST",
@@ -117,6 +145,26 @@ class AeroLogixBackendTester:
             print(f"✅ Authentication successful. Token obtained.")
             return True
         else:
+            # Try to create user if login failed
+            print("ℹ️ Login failed, attempting to create test user...")
+            if self.create_test_user():
+                # Try login again after user creation
+                success, response = self.run_test(
+                    "Login after user creation",
+                    "POST",
+                    "api/auth/login",
+                    200,
+                    data={
+                        "username": "test@aerologix.ca",
+                        "password": "password123"
+                    }
+                )
+                
+                if success and 'access_token' in response:
+                    self.token = response['access_token']
+                    print(f"✅ Authentication successful after user creation.")
+                    return True
+            
             print(f"❌ Authentication failed. Response: {response}")
             return False
 
