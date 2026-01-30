@@ -37,7 +37,9 @@ class ADSBAlertItem(BaseModel):
     id: str
     type: str = "NEW_AD_SB"
     aircraft_id: str
-    aircraft_model: str
+    aircraft_type_key: str  # CANONICAL: manufacturer::model
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
     reference: str
     reference_type: str
     message: str
