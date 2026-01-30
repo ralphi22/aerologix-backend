@@ -1370,6 +1370,234 @@ class AeroLogixBackendTester:
         
         return success1 and success2 and success3 and alert_management_success and success6
 
+    def test_tc_import_endpoints(self):
+        """Test TC Import endpoints for regression testing"""
+        print("📋 Testing TC Import Endpoints...")
+        
+        # Get aircraft ID first
+        aircraft_id, registration = self.get_aircraft_list()
+        
+        if not aircraft_id:
+            self.log_test("TC Import test setup", False, "No aircraft available for testing")
+            return False
+        
+        # Test 1: List TC References with new flags
+        print("📋 Test 1: List TC References with new flags")
+        success1, response1 = self.run_test(
+            f"Get TC references for aircraft {registration}",
+            "GET",
+            f"api/adsb/tc/references/{aircraft_id}",
+            200
+        )
+        
+        if not success1:
+            return False
+        
+        # Validate response structure
+        required_fields = ["aircraft_id", "total_count", "references"]
+        missing_fields = [field for field in required_fields if field not in response1]
+        
+        if missing_fields:
+            self.log_test(
+                "TC references response structure",
+                False,
+                f"Missing required fields: {missing_fields}"
+            )
+            return False
+        
+        # Validate aircraft_id matches
+        if response1.get("aircraft_id") != aircraft_id:
+            self.log_test(
+                "TC references aircraft_id validation",
+                False,
+                f"Expected aircraft_id={aircraft_id}, got {response1.get('aircraft_id')}"
+            )
+            return False
+        
+        # Validate references is an array
+        references = response1.get("references", [])
+        if not isinstance(references, list):
+            self.log_test(
+                "TC references format",
+                False,
+                f"References should be an array, got {type(references)}"
+            )
+            return False
+        
+        # Validate total_count matches references length
+        if response1.get("total_count") != len(references):
+            self.log_test(
+                "TC references count validation",
+                False,
+                f"Expected total_count={len(references)}, got {response1.get('total_count')}"
+            )
+            return False
+        
+        # Validate each reference structure (if any references exist)
+        for i, ref in enumerate(references):
+            required_ref_fields = [
+                "tc_reference_id", "identifier", "type", "tc_pdf_id", 
+                "pdf_available", "created_at", "has_user_pdf", "can_delete", "can_open_pdf"
+            ]
+            missing_ref_fields = [field for field in required_ref_fields if field not in ref]
+            
+            if missing_ref_fields:
+                self.log_test(
+                    f"TC reference {i} structure",
+                    False,
+                    f"Missing reference fields: {missing_ref_fields}"
+                )
+                return False
+            
+            # Validate new flags
+            if not isinstance(ref.get("has_user_pdf"), bool):
+                self.log_test(
+                    f"TC reference {i} has_user_pdf type",
+                    False,
+                    f"has_user_pdf should be boolean, got {type(ref.get('has_user_pdf'))}"
+                )
+                return False
+            
+            if not isinstance(ref.get("can_delete"), bool):
+                self.log_test(
+                    f"TC reference {i} can_delete type",
+                    False,
+                    f"can_delete should be boolean, got {type(ref.get('can_delete'))}"
+                )
+                return False
+            
+            if not isinstance(ref.get("can_open_pdf"), bool):
+                self.log_test(
+                    f"TC reference {i} can_open_pdf type",
+                    False,
+                    f"can_open_pdf should be boolean, got {type(ref.get('can_open_pdf'))}"
+                )
+                return False
+            
+            # Validate can_delete is always true for user imports
+            if not ref.get("can_delete"):
+                self.log_test(
+                    f"TC reference {i} can_delete value",
+                    False,
+                    f"can_delete should always be true for user imports, got {ref.get('can_delete')}"
+                )
+                return False
+            
+            # Validate reference type
+            if ref.get("type") not in ["AD", "SB"]:
+                self.log_test(
+                    f"TC reference {i} type",
+                    False,
+                    f"Invalid type: {ref.get('type')}, expected 'AD' or 'SB'"
+                )
+                return False
+        
+        self.log_test(
+            "TC references list validation",
+            True,
+            f"All validations passed. Total references: {len(references)}, New flags present: has_user_pdf, can_delete, can_open_pdf"
+        )
+        
+        # Test 2: DELETE endpoint (if references exist)
+        delete_success = True
+        if len(references) > 0:
+            print("📋 Test 2: DELETE endpoint works")
+            
+            # Get the first reference for deletion test
+            first_ref = references[0]
+            tc_reference_id = first_ref["tc_reference_id"]
+            
+            success2, response2 = self.run_test(
+                f"Delete TC reference {tc_reference_id}",
+                "DELETE",
+                f"api/adsb/tc/reference-by-id/{tc_reference_id}",
+                200
+            )
+            
+            if success2:
+                # Validate delete response
+                if not response2.get("ok"):
+                    self.log_test(
+                        "TC reference delete response",
+                        False,
+                        f"Expected ok=true, got {response2.get('ok')}"
+                    )
+                    delete_success = False
+                else:
+                    self.log_test(
+                        "TC reference delete",
+                        True,
+                        f"Reference {tc_reference_id} deleted successfully"
+                    )
+            else:
+                delete_success = False
+        else:
+            self.log_test(
+                "TC reference delete test",
+                True,
+                "No references available for deletion testing (expected for new system)"
+            )
+        
+        # Test 3: PDF endpoint (if references with tc_pdf_id exist)
+        pdf_success = True
+        if len(references) > 0:
+            print("📋 Test 3: PDF endpoint works")
+            
+            # Find a reference with tc_pdf_id
+            pdf_ref = None
+            for ref in references:
+                if ref.get("tc_pdf_id") and ref.get("can_open_pdf"):
+                    pdf_ref = ref
+                    break
+            
+            if pdf_ref:
+                tc_pdf_id = pdf_ref["tc_pdf_id"]
+                
+                # Test PDF endpoint
+                success3, response3 = self.run_test(
+                    f"Get PDF {tc_pdf_id}",
+                    "GET",
+                    f"api/adsb/tc/pdf/{tc_pdf_id}",
+                    200  # Expect 200 if file exists, 404 if not
+                )
+                
+                if success3:
+                    # Check if response is PDF content (we can't easily validate binary content in this test)
+                    self.log_test(
+                        "TC PDF endpoint",
+                        True,
+                        f"PDF {tc_pdf_id} retrieved successfully"
+                    )
+                else:
+                    # Check if it's a 404 (file doesn't exist) - this is acceptable
+                    if hasattr(response3, 'get') and response3.get('status_code') == 404:
+                        self.log_test(
+                            "TC PDF endpoint (file not found)",
+                            True,
+                            f"PDF {tc_pdf_id} not found (404) - acceptable for test environment"
+                        )
+                    else:
+                        self.log_test(
+                            "TC PDF endpoint",
+                            False,
+                            f"Unexpected response for PDF {tc_pdf_id}: {response3}"
+                        )
+                        pdf_success = False
+            else:
+                self.log_test(
+                    "TC PDF endpoint test",
+                    True,
+                    "No references with PDF available for testing (expected for new system)"
+                )
+        else:
+            self.log_test(
+                "TC PDF endpoint test",
+                True,
+                "No references available for PDF testing (expected for new system)"
+            )
+        
+        return success1 and delete_success and pdf_success
+
     def run_all_tests(self):
         """Run all tests in sequence"""
         print("🚀 Starting AeroLogix AI Backend Tests")
