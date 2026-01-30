@@ -876,6 +876,166 @@ class AeroLogixBackendTester:
         
         return success1 and success2 and success3 and success4
 
+    def test_ocr_scan_adsb_endpoint(self):
+        """Test OCR Scan AD/SB Aggregation endpoint"""
+        print("🔍 Testing OCR Scan AD/SB Aggregation Endpoint...")
+        
+        # Get aircraft ID first
+        aircraft_id, registration = self.get_aircraft_list()
+        
+        if not aircraft_id:
+            self.log_test("OCR Scan AD/SB test setup", False, "No aircraft available for testing")
+            return False
+        
+        # Test the OCR scan AD/SB endpoint
+        success, response = self.run_test(
+            f"Get OCR scan AD/SB for aircraft {registration}",
+            "GET",
+            f"api/adsb/ocr-scan/{aircraft_id}",
+            200
+        )
+        
+        if not success:
+            return False
+        
+        # Validate response structure
+        required_fields = [
+            "aircraft_id", "registration", "items", "total_unique_references",
+            "total_ad", "total_sb", "documents_analyzed", "source", "disclaimer"
+        ]
+        missing_fields = [field for field in required_fields if field not in response]
+        
+        if missing_fields:
+            self.log_test(
+                "OCR scan AD/SB response structure",
+                False,
+                f"Missing required fields: {missing_fields}"
+            )
+            return False
+        
+        # Validate specific field values
+        if response.get("aircraft_id") != aircraft_id:
+            self.log_test(
+                "OCR scan AD/SB aircraft_id validation",
+                False,
+                f"Expected aircraft_id={aircraft_id}, got {response.get('aircraft_id')}"
+            )
+            return False
+        
+        if response.get("source") != "scanned_documents":
+            self.log_test(
+                "OCR scan AD/SB source validation",
+                False,
+                f"Expected source='scanned_documents', got {response.get('source')}"
+            )
+            return False
+        
+        # Validate items structure (if any items exist)
+        items = response.get("items", [])
+        if not isinstance(items, list):
+            self.log_test(
+                "OCR scan AD/SB items format",
+                False,
+                f"Items should be an array, got {type(items)}"
+            )
+            return False
+        
+        # Validate each item structure (if items exist)
+        for i, item in enumerate(items):
+            required_item_fields = [
+                "reference", "type", "occurrence_count", "source",
+                "first_seen_date", "last_seen_date", "scan_ids"
+            ]
+            missing_item_fields = [field for field in required_item_fields if field not in item]
+            
+            if missing_item_fields:
+                self.log_test(
+                    f"OCR scan AD/SB item {i} structure",
+                    False,
+                    f"Missing item fields: {missing_item_fields}"
+                )
+                return False
+            
+            # Validate item type
+            if item.get("type") not in ["AD", "SB"]:
+                self.log_test(
+                    f"OCR scan AD/SB item {i} type",
+                    False,
+                    f"Invalid type: {item.get('type')}, expected 'AD' or 'SB'"
+                )
+                return False
+            
+            # Validate occurrence_count is positive integer
+            if not isinstance(item.get("occurrence_count"), int) or item.get("occurrence_count") < 0:
+                self.log_test(
+                    f"OCR scan AD/SB item {i} occurrence_count",
+                    False,
+                    f"Invalid occurrence_count: {item.get('occurrence_count')}"
+                )
+                return False
+        
+        # Validate counts match items
+        total_ad = sum(1 for item in items if item.get("type") == "AD")
+        total_sb = sum(1 for item in items if item.get("type") == "SB")
+        
+        if response.get("total_ad") != total_ad:
+            self.log_test(
+                "OCR scan AD/SB total_ad count",
+                False,
+                f"Expected total_ad={total_ad}, got {response.get('total_ad')}"
+            )
+            return False
+        
+        if response.get("total_sb") != total_sb:
+            self.log_test(
+                "OCR scan AD/SB total_sb count",
+                False,
+                f"Expected total_sb={total_sb}, got {response.get('total_sb')}"
+            )
+            return False
+        
+        if response.get("total_unique_references") != len(items):
+            self.log_test(
+                "OCR scan AD/SB total_unique_references count",
+                False,
+                f"Expected total_unique_references={len(items)}, got {response.get('total_unique_references')}"
+            )
+            return False
+        
+        # Validate disclaimer exists
+        if not response.get("disclaimer"):
+            self.log_test(
+                "OCR scan AD/SB disclaimer",
+                False,
+                "Disclaimer field is missing or empty"
+            )
+            return False
+        
+        # Log successful validation
+        self.log_test(
+            "OCR scan AD/SB endpoint validation",
+            True,
+            f"All validations passed. Items: {len(items)}, AD: {total_ad}, SB: {total_sb}, Documents: {response.get('documents_analyzed', 0)}"
+        )
+        
+        # Test with invalid aircraft ID
+        success_invalid, response_invalid = self.run_test(
+            "Get OCR scan AD/SB for invalid aircraft",
+            "GET",
+            "api/adsb/ocr-scan/invalid_aircraft_id",
+            404
+        )
+        
+        if not success_invalid:
+            self.log_test(
+                "OCR scan AD/SB invalid aircraft test",
+                False,
+                "Expected 404 for invalid aircraft_id"
+            )
+            return False
+        
+        return success and success_invalid
+
     def run_all_tests(self):
         """Run all tests in sequence"""
         print("🚀 Starting AeroLogix AI Backend Tests")
