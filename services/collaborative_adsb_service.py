@@ -1,0 +1,407 @@
+"""
+Collaborative AD/SB Detection Service
+
+Detects new AD/SB references and notifies users with the same aircraft model.
+
+ARCHITECTURE:
+1. Global reference pool: tc_adsb_global_references (model + reference)
+2. User alerts: tc_adsb_alerts (per user, per aircraft)
+
+PROCESS:
+1. On TC import → check if reference is new for this model
+2. If new → add to global pool + create alerts for other users
+3. Alerts are informational only (no compliance decisions)
+
+TC-SAFE:
+- Documentary detection only
+- No regulatory interpretation
+- Human decision required
+"""
+
+import re
+import logging
+from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional, Set
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# MODELS
+# ============================================================
+
+class NewReferenceAlert(BaseModel):
+    """Alert for a new AD/SB reference"""
+    type: str = "NEW_AD_SB"
+    aircraft_model: str
+    reference: str
+    reference_type: str  # "AD" or "SB"
+    message: str
+    contributed_by_user_id: str  # Anonymized to protect privacy
+    created_at: datetime
+
+
+class CollaborativeDetectionResult(BaseModel):
+    """Result of collaborative detection"""
+    new_references_count: int = 0
+    alerts_created_count: int = 0
+    users_notified: int = 0
+    references_added_to_pool: List[str] = []
+
+
+# ============================================================
+# SERVICE
+# ============================================================
+
+class CollaborativeADSBService:
+    """
+    Service for collaborative AD/SB reference detection.
+    
+    Collections used:
+    - tc_adsb_global_references: Global pool of model+reference pairs
+    - tc_adsb_alerts: User alerts for new references
+    - aircrafts: To find users with same model
+    
+    TC-SAFE: Detection only, no compliance decisions.
+    """
+    
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.db = db
+    
+    # --------------------------------------------------------
+    # NORMALIZATION
+    # --------------------------------------------------------
+    
+    def normalize_model(self, model: str) -> str:
+        """
+        Normalize aircraft model for matching.
+        
+        - Uppercase
+        - Remove spaces and hyphens
+        - Keep alphanumeric only
+        """
+        if not model:
+            return ""
+        return re.sub(r'[^A-Z0-9]', '', model.upper())
+    
+    def normalize_reference(self, ref: str) -> str:
+        """
+        Normalize AD/SB reference for matching.
+        
+        - Uppercase
+        - Standardize separators
+        """
+        if not ref:
+            return ""
+        normalized = ref.strip().upper()
+        # Remove multiple spaces/separators
+        normalized = re.sub(r'[\s\-_.]+', '-', normalized)
+        return normalized.strip('-')
+    
+    def create_global_key(self, model: str, reference: str) -> str:
+        """Create a unique key for the global reference pool."""
+        model_norm = self.normalize_model(model)
+        ref_norm = self.normalize_reference(reference)
+        return f"{model_norm}::{ref_norm}"
+    
+    # --------------------------------------------------------
+    # GLOBAL REFERENCE POOL
+    # --------------------------------------------------------
+    
+    async def check_reference_exists(self, model: str, reference: str) -> bool:
+        """Check if a reference already exists in the global pool for this model."""
+        global_key = self.create_global_key(model, reference)
+        
+        existing = await self.db.tc_adsb_global_references.find_one({
+            "global_key": global_key
+        })
+        
+        return existing is not None
+    
+    async def add_reference_to_pool(
+        self,
+        model: str,
+        reference: str,
+        reference_type: str,
+        contributed_by: str,
+        aircraft_id: str
+    ) -> bool:
+        """
+        Add a reference to the global pool.
+        
+        Returns:
+            True if added (was new), False if already existed
+        """
+        global_key = self.create_global_key(model, reference)
+        model_norm = self.normalize_model(model)
+        ref_norm = self.normalize_reference(reference)
+        
+        # Check if already exists
+        existing = await self.db.tc_adsb_global_references.find_one({
+            "global_key": global_key
+        })
+        
+        if existing:
+            # Update seen count
+            await self.db.tc_adsb_global_references.update_one(
+                {"global_key": global_key},
+                {
+                    "$inc": {"seen_count": 1},
+                    "$set": {"last_seen_at": datetime.now(timezone.utc)},
+                    "$addToSet": {"contributing_users": contributed_by}
+                }
+            )
+            return False
+        
+        # Create new entry
+        doc = {
+            "global_key": global_key,
+            "model_normalized": model_norm,
+            "model_original": model,
+            "reference_normalized": ref_norm,
+            "reference_original": reference,
+            "reference_type": reference_type,
+            "first_contributed_by": contributed_by,
+            "first_contributed_aircraft_id": aircraft_id,
+            "contributing_users": [contributed_by],
+            "seen_count": 1,
+            "first_seen_at": datetime.now(timezone.utc),
+            "last_seen_at": datetime.now(timezone.utc)
+        }
+        
+        try:
+            await self.db.tc_adsb_global_references.insert_one(doc)
+            logger.info(f"[COLLABORATIVE] New reference added to pool: {reference} for model={model}")
+            return True
+        except Exception as e:
+            # Handle race condition (duplicate key)
+            logger.warning(f"[COLLABORATIVE] Failed to add reference (race condition?): {e}")
+            return False
+    
+    # --------------------------------------------------------
+    # FIND USERS WITH SAME MODEL
+    # --------------------------------------------------------
+    
+    async def find_users_with_model(
+        self,
+        model: str,
+        exclude_user_id: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Find all users who have an aircraft with the same model.
+        
+        Returns:
+            List of {user_id, aircraft_id, registration} dicts
+        """
+        model_norm = self.normalize_model(model)
+        
+        if not model_norm:
+            return []
+        
+        # Build regex for model matching (e.g., "172" matches "172M", "172N")
+        # Use the first numeric portion as base
+        base_match = re.match(r'^([A-Z]*\d+)', model_norm)
+        if base_match:
+            base_pattern = base_match.group(1)
+            regex_pattern = f"^{re.escape(base_pattern)}"
+        else:
+            regex_pattern = f"^{re.escape(model_norm)}"
+        
+        # Find all aircraft with matching model (different users)
+        results = []
+        
+        cursor = self.db.aircrafts.find({
+            "user_id": {"$ne": exclude_user_id}
+        })
+        
+        async for aircraft in cursor:
+            aircraft_model = aircraft.get("model", "")
+            aircraft_model_norm = self.normalize_model(aircraft_model)
+            
+            # Check if models are compatible
+            if re.match(regex_pattern, aircraft_model_norm):
+                results.append({
+                    "user_id": aircraft["user_id"],
+                    "aircraft_id": aircraft["_id"],
+                    "registration": aircraft.get("registration"),
+                    "model": aircraft_model
+                })
+        
+        # Deduplicate by user_id (keep first aircraft per user)
+        seen_users: Set[str] = set()
+        unique_results = []
+        for r in results:
+            if r["user_id"] not in seen_users:
+                seen_users.add(r["user_id"])
+                unique_results.append(r)
+        
+        return unique_results
+    
+    # --------------------------------------------------------
+    # CREATE ALERTS
+    # --------------------------------------------------------
+    
+    async def create_alert(
+        self,
+        user_id: str,
+        aircraft_id: str,
+        model: str,
+        reference: str,
+        reference_type: str,
+        contributed_by: str
+    ) -> bool:
+        """
+        Create an alert for a user about a new reference.
+        
+        Returns:
+            True if alert created, False if duplicate
+        """
+        # Check for duplicate alert
+        existing = await self.db.tc_adsb_alerts.find_one({
+            "user_id": user_id,
+            "aircraft_id": aircraft_id,
+            "reference": reference,
+            "status": {"$ne": "DISMISSED"}
+        })
+        
+        if existing:
+            return False
+        
+        # Create alert
+        alert_doc = {
+            "type": "NEW_AD_SB",
+            "user_id": user_id,
+            "aircraft_id": aircraft_id,
+            "aircraft_model": model,
+            "reference": reference,
+            "reference_type": reference_type,
+            "message": f"A new {reference_type} reference ({reference}) was added for your aircraft model ({model}). Please review with your AME.",
+            "status": "UNREAD",
+            "contributed_by_aircraft_model": model,  # Privacy: no user info
+            "created_at": datetime.now(timezone.utc),
+            "read_at": None,
+            "dismissed_at": None
+        }
+        
+        try:
+            await self.db.tc_adsb_alerts.insert_one(alert_doc)
+            return True
+        except Exception as e:
+            logger.warning(f"[COLLABORATIVE] Failed to create alert: {e}")
+            return False
+    
+    # --------------------------------------------------------
+    # MAIN DETECTION METHOD
+    # --------------------------------------------------------
+    
+    async def process_imported_references(
+        self,
+        references: List[str],
+        reference_type: str,
+        aircraft_id: str,
+        user_id: str,
+        model: str
+    ) -> CollaborativeDetectionResult:
+        """
+        Process imported references for collaborative detection.
+        
+        Called after TC PDF import to:
+        1. Check each reference against global pool
+        2. Add new references to pool
+        3. Create alerts for other users with same model
+        
+        Args:
+            references: List of imported reference identifiers
+            reference_type: "AD" or "SB"
+            aircraft_id: Source aircraft ID
+            user_id: User who imported
+            model: Aircraft model
+            
+        Returns:
+            CollaborativeDetectionResult with counts
+        """
+        logger.info(
+            f"[COLLABORATIVE] Processing {len(references)} references | "
+            f"aircraft={aircraft_id} | model={model} | user={user_id}"
+        )
+        
+        if not references or not model:
+            return CollaborativeDetectionResult()
+        
+        new_references = []
+        alerts_created = 0
+        users_notified: Set[str] = set()
+        
+        # Step 1: Check each reference against global pool
+        for ref in references:
+            is_new = await self.add_reference_to_pool(
+                model=model,
+                reference=ref,
+                reference_type=reference_type,
+                contributed_by=user_id,
+                aircraft_id=aircraft_id
+            )
+            
+            if is_new:
+                new_references.append(ref)
+        
+        # Step 2: If new references found, notify other users
+        if new_references:
+            logger.info(f"[COLLABORATIVE] {len(new_references)} NEW references detected for model={model}")
+            
+            # Find other users with same model
+            other_users = await self.find_users_with_model(
+                model=model,
+                exclude_user_id=user_id
+            )
+            
+            logger.info(f"[COLLABORATIVE] Found {len(other_users)} other users with model {model}")
+            
+            # Create alerts for each new reference to each user
+            for user_info in other_users:
+                for ref in new_references:
+                    created = await self.create_alert(
+                        user_id=user_info["user_id"],
+                        aircraft_id=user_info["aircraft_id"],
+                        model=model,
+                        reference=ref,
+                        reference_type=reference_type,
+                        contributed_by=user_id
+                    )
+                    
+                    if created:
+                        alerts_created += 1
+                        users_notified.add(user_info["user_id"])
+        
+        result = CollaborativeDetectionResult(
+            new_references_count=len(new_references),
+            alerts_created_count=alerts_created,
+            users_notified=len(users_notified),
+            references_added_to_pool=new_references
+        )
+        
+        # Log summary
+        if new_references:
+            logger.info(
+                f"[COLLABORATIVE] RESULT | new_refs={result.new_references_count} | "
+                f"alerts={result.alerts_created_count} | users_notified={result.users_notified}"
+            )
+        
+        return result
+
+
+# ============================================================
+# SINGLETON
+# ============================================================
+
+_service_instance: Optional[CollaborativeADSBService] = None
+
+
+def get_collaborative_service(db: AsyncIOMotorDatabase) -> CollaborativeADSBService:
+    """Get or create the collaborative service instance."""
+    global _service_instance
+    if _service_instance is None:
+        _service_instance = CollaborativeADSBService(db)
+    return _service_instance
