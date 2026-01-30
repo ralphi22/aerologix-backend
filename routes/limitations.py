@@ -185,6 +185,230 @@ async def get_limitations_summary(
     }
 
 
+# ============================================================
+# CRITICAL MENTIONS ENDPOINT - Aggregated view
+# ============================================================
+
+@router.get("/{aircraft_id}/critical-mentions")
+async def get_critical_mentions(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db = Depends(get_database)
+):
+    """
+    Get all critical mentions for an aircraft with report dates.
+    
+    Aggregates data from:
+    - operational_limitations (ELT, AVIONICS, GENERAL limitations)
+    - ocr_scans.extracted_data.elt_data (ELT component data)
+    
+    Returns structured view by category:
+    - ELT mentions
+    - Avionics mentions (pitot/static/transponder)
+    - Fire extinguisher mentions
+    - Other limitations
+    
+    READ-ONLY - No calculations, no status inference.
+    INFORMATIONAL ONLY - Always verify with AME.
+    """
+    logger.info(f"Getting critical mentions for aircraft_id={aircraft_id}")
+    
+    # Verify aircraft belongs to user
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(status_code=404, detail="Aircraft not found")
+    
+    registration = aircraft.get("registration")
+    
+    # Initialize response structure
+    critical_mentions = {
+        "elt": [],
+        "avionics": [],
+        "fire_extinguisher": [],
+        "general_limitations": []
+    }
+    
+    # ============================================================
+    # 1. Get limitations by category from operational_limitations
+    # ============================================================
+    
+    # ELT limitations
+    elt_cursor = db.operational_limitations.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "category": "ELT"
+    }).sort("report_date", -1)
+    
+    async for doc in elt_cursor:
+        report_date_str = None
+        if doc.get("report_date"):
+            if isinstance(doc["report_date"], datetime):
+                report_date_str = doc["report_date"].strftime("%Y-%m-%d")
+            else:
+                report_date_str = str(doc["report_date"])
+        
+        critical_mentions["elt"].append({
+            "id": str(doc.get("_id", "")),
+            "text": doc.get("limitation_text", ""),
+            "keywords": doc.get("detected_keywords", []),
+            "confidence": doc.get("confidence", 0.5),
+            "report_id": doc.get("report_id"),
+            "report_date": report_date_str,
+            "source": "limitation_detector"
+        })
+    
+    # Avionics limitations (pitot/static/transponder)
+    avionics_cursor = db.operational_limitations.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "category": "AVIONICS"
+    }).sort("report_date", -1)
+    
+    async for doc in avionics_cursor:
+        report_date_str = None
+        if doc.get("report_date"):
+            if isinstance(doc["report_date"], datetime):
+                report_date_str = doc["report_date"].strftime("%Y-%m-%d")
+            else:
+                report_date_str = str(doc["report_date"])
+        
+        critical_mentions["avionics"].append({
+            "id": str(doc.get("_id", "")),
+            "text": doc.get("limitation_text", ""),
+            "keywords": doc.get("detected_keywords", []),
+            "confidence": doc.get("confidence", 0.5),
+            "report_id": doc.get("report_id"),
+            "report_date": report_date_str,
+            "source": "limitation_detector"
+        })
+    
+    # General limitations (includes fire extinguisher if detected)
+    general_cursor = db.operational_limitations.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "category": {"$in": ["GENERAL", "ENGINE", "PROPELLER", "AIRFRAME"]}
+    }).sort("report_date", -1)
+    
+    async for doc in general_cursor:
+        report_date_str = None
+        if doc.get("report_date"):
+            if isinstance(doc["report_date"], datetime):
+                report_date_str = doc["report_date"].strftime("%Y-%m-%d")
+            else:
+                report_date_str = str(doc["report_date"])
+        
+        text_lower = (doc.get("limitation_text") or "").lower()
+        
+        # Check if this is a fire extinguisher mention
+        if "fire" in text_lower or "extinguisher" in text_lower:
+            critical_mentions["fire_extinguisher"].append({
+                "id": str(doc.get("_id", "")),
+                "text": doc.get("limitation_text", ""),
+                "keywords": doc.get("detected_keywords", []),
+                "confidence": doc.get("confidence", 0.5),
+                "report_id": doc.get("report_id"),
+                "report_date": report_date_str,
+                "source": "limitation_detector"
+            })
+        else:
+            critical_mentions["general_limitations"].append({
+                "id": str(doc.get("_id", "")),
+                "text": doc.get("limitation_text", ""),
+                "keywords": doc.get("detected_keywords", []),
+                "confidence": doc.get("confidence", 0.5),
+                "report_id": doc.get("report_id"),
+                "report_date": report_date_str,
+                "category": doc.get("category", "GENERAL"),
+                "source": "limitation_detector"
+            })
+    
+    # ============================================================
+    # 2. Get ELT data from OCR scans (extracted_data.elt_data)
+    # ============================================================
+    
+    ocr_cursor = db.ocr_scans.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "status": {"$in": ["COMPLETED", "APPLIED"]},
+        "extracted_data.elt_data.detected": True
+    }).sort("created_at", -1)
+    
+    async for scan in ocr_cursor:
+        extracted = scan.get("extracted_data", {})
+        elt_data = extracted.get("elt_data", {})
+        
+        if not elt_data or not elt_data.get("detected"):
+            continue
+        
+        # Get report date from extracted_data or scan created_at
+        report_date_str = None
+        if extracted.get("date"):
+            report_date_str = extracted["date"]
+        elif scan.get("created_at"):
+            if isinstance(scan["created_at"], datetime):
+                report_date_str = scan["created_at"].strftime("%Y-%m-%d")
+        
+        # Build ELT mention from OCR data
+        elt_mention = {
+            "id": f"ocr_{scan.get('_id', '')}",
+            "text": None,
+            "brand": elt_data.get("brand"),
+            "model": elt_data.get("model"),
+            "serial_number": elt_data.get("serial_number"),
+            "battery_expiry_date": elt_data.get("battery_expiry_date"),
+            "battery_install_date": elt_data.get("battery_install_date"),
+            "certification_date": elt_data.get("certification_date"),
+            "beacon_hex_id": elt_data.get("beacon_hex_id"),
+            "report_id": str(scan.get("_id", "")),
+            "report_date": report_date_str,
+            "source": "ocr_extraction"
+        }
+        
+        # Build readable text summary
+        text_parts = []
+        if elt_data.get("brand"):
+            text_parts.append(f"ELT: {elt_data['brand']}")
+        if elt_data.get("model"):
+            text_parts.append(f"Model: {elt_data['model']}")
+        if elt_data.get("battery_expiry_date"):
+            text_parts.append(f"Battery expires: {elt_data['battery_expiry_date']}")
+        
+        elt_mention["text"] = " | ".join(text_parts) if text_parts else "ELT detected"
+        
+        critical_mentions["elt"].append(elt_mention)
+    
+    # ============================================================
+    # 3. Build summary counts
+    # ============================================================
+    
+    summary = {
+        "elt_count": len(critical_mentions["elt"]),
+        "avionics_count": len(critical_mentions["avionics"]),
+        "fire_extinguisher_count": len(critical_mentions["fire_extinguisher"]),
+        "general_limitations_count": len(critical_mentions["general_limitations"]),
+        "total_count": sum([
+            len(critical_mentions["elt"]),
+            len(critical_mentions["avionics"]),
+            len(critical_mentions["fire_extinguisher"]),
+            len(critical_mentions["general_limitations"])
+        ])
+    }
+    
+    logger.info(f"Critical mentions for {aircraft_id}: {summary}")
+    
+    return {
+        "aircraft_id": aircraft_id,
+        "registration": registration,
+        "critical_mentions": critical_mentions,
+        "summary": summary,
+        "disclaimer": "INFORMATIONAL ONLY - Always verify with AME and official records"
+    }
+
+
 @router.delete("/{aircraft_id}/{limitation_id}")
 async def delete_limitation(
     aircraft_id: str,
