@@ -1382,6 +1382,7 @@ class AeroLogixBackendTester:
         
         # Run all test suites
         test_suites = [
+            ("TC Import Endpoints", self.test_tc_import_endpoints),
             ("Counter Guard Implementation", self.test_counter_guard_implementation),
             ("Critical Mentions Endpoint", self.test_critical_mentions_endpoint),
             ("OCR Scan AD/SB Endpoint", self.test_ocr_scan_adsb_endpoint),
