@@ -690,14 +690,65 @@ async def apply_ocr_results(
         # ===== RÈGLE MÉTIER: Seul "Rapport" peut créer maintenance/pièces =====
         
         # 1. Update aircraft hours if provided (ONLY FOR RAPPORT)
+        # ============================================================
+        # COUNTER GUARD: AIRFRAME is the master counter
+        # - engine_hours and propeller_hours cannot exceed airframe_hours
+        # - If airframe_hours is missing, do NOT update engine/propeller
+        # ============================================================
         if is_maintenance_report and update_aircraft_hours:
             hours_update = {}
-            if extracted_data.get("airframe_hours") is not None:
-                hours_update["airframe_hours"] = extracted_data["airframe_hours"]
-            if extracted_data.get("engine_hours") is not None:
-                hours_update["engine_hours"] = extracted_data["engine_hours"]
-            if extracted_data.get("propeller_hours") is not None:
-                hours_update["propeller_hours"] = extracted_data["propeller_hours"]
+            
+            # Get current aircraft hours for comparison
+            current_aircraft = await db.aircrafts.find_one({"_id": aircraft_id})
+            current_airframe = current_aircraft.get("airframe_hours", 0.0) if current_aircraft else 0.0
+            
+            # Extract OCR values
+            ocr_airframe = extracted_data.get("airframe_hours")
+            ocr_engine = extracted_data.get("engine_hours")
+            ocr_propeller = extracted_data.get("propeller_hours")
+            
+            # GUARD 1: Airframe is the master - always accept if present
+            if ocr_airframe is not None:
+                hours_update["airframe_hours"] = ocr_airframe
+                master_airframe = ocr_airframe
+            else:
+                master_airframe = current_airframe
+            
+            # GUARD 2: Engine hours - only update if airframe is present AND engine <= airframe
+            if ocr_engine is not None:
+                if ocr_airframe is None:
+                    # No airframe in OCR → do NOT update engine (preserve existing)
+                    logger.warning(
+                        f"[COUNTER_GUARD] aircraft={aircraft_id} | "
+                        f"engine_hours ({ocr_engine}) ignored — airframe_hours missing in OCR"
+                    )
+                elif ocr_engine > master_airframe:
+                    # Engine > Airframe → do NOT update (would violate master rule)
+                    logger.warning(
+                        f"[COUNTER_GUARD] aircraft={aircraft_id} | "
+                        f"engine_hours ({ocr_engine}) > airframe_hours ({master_airframe}) — rejected"
+                    )
+                else:
+                    # Valid: engine <= airframe
+                    hours_update["engine_hours"] = ocr_engine
+            
+            # GUARD 3: Propeller hours - same logic as engine
+            if ocr_propeller is not None:
+                if ocr_airframe is None:
+                    # No airframe in OCR → do NOT update propeller (preserve existing)
+                    logger.warning(
+                        f"[COUNTER_GUARD] aircraft={aircraft_id} | "
+                        f"propeller_hours ({ocr_propeller}) ignored — airframe_hours missing in OCR"
+                    )
+                elif ocr_propeller > master_airframe:
+                    # Propeller > Airframe → do NOT update (would violate master rule)
+                    logger.warning(
+                        f"[COUNTER_GUARD] aircraft={aircraft_id} | "
+                        f"propeller_hours ({ocr_propeller}) > airframe_hours ({master_airframe}) — rejected"
+                    )
+                else:
+                    # Valid: propeller <= airframe
+                    hours_update["propeller_hours"] = ocr_propeller
             
             if hours_update:
                 hours_update["updated_at"] = now
@@ -707,7 +758,7 @@ async def apply_ocr_results(
                 )
                 logger.info(f"✅ Updated aircraft {aircraft_id} hours: {hours_update}")
             else:
-                logger.warning(f"⚠️ No hours to update for aircraft {aircraft_id} - extracted values were None or empty")
+                logger.warning(f"⚠️ No hours to update for aircraft {aircraft_id} - extracted values were None or guarded")
         else:
             if not is_maintenance_report:
                 logger.info(f"ℹ️ Skipping hours update - document_type is '{document_type}' (not maintenance_report)")
