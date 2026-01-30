@@ -17,7 +17,7 @@ import json
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-class TCADSBDetectionTester:
+class AeroLogixBackendTester:
     def __init__(self, base_url="http://localhost:8001"):
         self.base_url = base_url
         self.token = None
