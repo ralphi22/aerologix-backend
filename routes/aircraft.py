@@ -127,7 +127,36 @@ async def update_aircraft(
     if "registration" in update_data:
         update_data["registration"] = format_registration(update_data["registration"])
     
+    # ============================================================
+    # COUNTER GUARD: AIRFRAME is the master counter
+    # - engine_hours and propeller_hours cannot exceed airframe_hours
+    # - Silently normalize without error
+    # ============================================================
     if update_data:
+        # Determine the effective airframe_hours (new value or existing)
+        if "airframe_hours" in update_data and update_data["airframe_hours"] is not None:
+            master_airframe = update_data["airframe_hours"]
+        else:
+            master_airframe = existing.get("airframe_hours", 0.0)
+        
+        # GUARD: Engine hours cannot exceed airframe
+        if "engine_hours" in update_data and update_data["engine_hours"] is not None:
+            if update_data["engine_hours"] > master_airframe:
+                logger.warning(
+                    f"[COUNTER_GUARD] aircraft={aircraft_id} | "
+                    f"engine_hours ({update_data['engine_hours']}) > airframe_hours ({master_airframe}) — normalized"
+                )
+                update_data["engine_hours"] = master_airframe
+        
+        # GUARD: Propeller hours cannot exceed airframe
+        if "propeller_hours" in update_data and update_data["propeller_hours"] is not None:
+            if update_data["propeller_hours"] > master_airframe:
+                logger.warning(
+                    f"[COUNTER_GUARD] aircraft={aircraft_id} | "
+                    f"propeller_hours ({update_data['propeller_hours']}) > airframe_hours ({master_airframe}) — normalized"
+                )
+                update_data["propeller_hours"] = master_airframe
+        
         update_data["updated_at"] = datetime.utcnow()
         await db.aircrafts.update_one(
             {"_id": aircraft_id},
