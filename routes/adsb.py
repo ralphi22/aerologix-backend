@@ -1548,3 +1548,250 @@ async def get_ocr_scan_adsb(
         documents_analyzed=documents_analyzed,
         source="scanned_documents"
     )
+
+
+# ============================================================
+# ENDPOINT: TC AD/SB vs OCR COMPARISON (BADGES)
+# ============================================================
+# Compares TC official AD/SB against OCR-detected references.
+# Returns a simple badge status: seen_in_documents = true/false
+#
+# TC-SAFE: No compliance, no regulatory logic, factual only.
+# ============================================================
+
+class TCvsOCRBadgeItem(BaseModel):
+    """Single TC AD/SB item with OCR visibility badge"""
+    reference: str
+    type: str  # "AD" or "SB"
+    title: Optional[str] = None
+    seen_in_documents: bool  # True if detected in any OCR scan
+    occurrence_count: int = 0  # How many times seen in OCR
+    last_seen_date: Optional[str] = None  # Most recent OCR detection
+
+
+class TCvsOCRBadgeResponse(BaseModel):
+    """
+    TC AD/SB vs OCR Comparison Response.
+    
+    TC-SAFE: Documentary visibility check only.
+    No compliance, no regulatory decisions.
+    """
+    aircraft_id: str
+    registration: Optional[str] = None
+    items: List[TCvsOCRBadgeItem] = []
+    total_tc_references: int = 0
+    total_seen: int = 0
+    total_not_seen: int = 0
+    ocr_documents_analyzed: int = 0
+    source: str = "tc_imported_references"
+    disclaimer: str = (
+        "This comparison shows which TC AD/SB references have been detected "
+        "in scanned maintenance documents. This is DOCUMENTARY VISIBILITY ONLY, "
+        "not a compliance assessment. Verify with original documents and a licensed AME."
+    )
+
+
+def normalize_reference_for_comparison(ref: str) -> str:
+    """
+    Normalize AD/SB reference for comparison matching.
+    
+    - Uppercase
+    - Remove extra whitespace
+    - Remove common separators for loose matching
+    """
+    if not ref:
+        return ""
+    
+    normalized = ref.strip().upper()
+    
+    # Remove multiple spaces
+    normalized = re.sub(r'\s+', '', normalized)
+    
+    # Remove common separators for comparison
+    normalized = re.sub(r'[.\-_/]', '', normalized)
+    
+    return normalized
+
+
+def references_match(tc_ref: str, ocr_ref: str) -> bool:
+    """
+    Check if TC reference matches OCR reference.
+    
+    Uses normalized comparison for flexibility.
+    Also checks if one contains the other (partial match).
+    """
+    tc_norm = normalize_reference_for_comparison(tc_ref)
+    ocr_norm = normalize_reference_for_comparison(ocr_ref)
+    
+    if not tc_norm or not ocr_norm:
+        return False
+    
+    # Exact match
+    if tc_norm == ocr_norm:
+        return True
+    
+    # Partial match (TC ref contained in OCR or vice versa)
+    # This handles cases like "CF-90-03" matching "CF-90-03R2"
+    if len(tc_norm) >= 4 and len(ocr_norm) >= 4:
+        if tc_norm in ocr_norm or ocr_norm in tc_norm:
+            return True
+    
+    return False
+
+
+@router.get(
+    "/tc-comparison/{aircraft_id}",
+    response_model=TCvsOCRBadgeResponse,
+    summary="TC AD/SB vs OCR Comparison [BADGES]",
+    description="""
+    **TC AD/SB vs OCR Comparison**
+    
+    Compares Transport Canada AD/SB references against 
+    OCR-detected references from scanned documents.
+    
+    **For each TC AD/SB:**
+    - `seen_in_documents`: True if detected in any OCR scan
+    - `occurrence_count`: Number of OCR documents where detected
+    - `last_seen_date`: Most recent detection date
+    
+    **Data Sources:**
+    - TC: `tc_imported_references` collection (user-imported)
+    - OCR: `ocr_scans` with status=APPLIED
+    
+    **TC-SAFE:** Documentary visibility only, no compliance.
+    """
+)
+async def get_tc_vs_ocr_comparison(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    Compare TC AD/SB references against OCR-detected references.
+    
+    Returns badge status for each TC reference.
+    """
+    logger.info(f"[TC-VS-OCR] Comparison | aircraft_id={aircraft_id} | user={current_user.id}")
+    
+    # Verify aircraft belongs to user
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aircraft not found"
+        )
+    
+    registration = aircraft.get("registration")
+    
+    # ============================================================
+    # STEP 1: Get OCR-detected references (from APPLIED scans)
+    # ============================================================
+    ocr_references: Dict[str, Dict[str, Any]] = {}  # {normalized_ref: {dates, count}}
+    ocr_documents_analyzed = 0
+    
+    cursor = db.ocr_scans.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "status": "APPLIED"
+    })
+    
+    async for scan in cursor:
+        ocr_documents_analyzed += 1
+        scan_date = scan.get("created_at")
+        date_str = scan_date.strftime("%Y-%m-%d") if scan_date else None
+        
+        extracted_data = scan.get("extracted_data", {})
+        adsb_refs = extracted_data.get("ad_sb_references", [])
+        
+        for ref in adsb_refs:
+            if isinstance(ref, dict):
+                raw_ref = ref.get("reference_number") or ref.get("identifier") or ref.get("ref") or ""
+            elif isinstance(ref, str):
+                raw_ref = ref
+            else:
+                continue
+            
+            if not raw_ref:
+                continue
+            
+            normalized = normalize_reference_for_comparison(raw_ref)
+            
+            if normalized not in ocr_references:
+                ocr_references[normalized] = {
+                    "original": raw_ref,
+                    "dates": [],
+                    "count": 0
+                }
+            
+            ocr_references[normalized]["count"] += 1
+            if date_str and date_str not in ocr_references[normalized]["dates"]:
+                ocr_references[normalized]["dates"].append(date_str)
+    
+    # ============================================================
+    # STEP 2: Get TC AD/SB references (user-imported)
+    # ============================================================
+    items: List[TCvsOCRBadgeItem] = []
+    
+    async for tc_ref in db.tc_imported_references.find({"aircraft_id": aircraft_id}):
+        identifier = tc_ref.get("identifier", "")
+        ref_type = tc_ref.get("type", "AD")
+        title = tc_ref.get("title")
+        
+        if not identifier:
+            continue
+        
+        # Check if this TC reference was seen in OCR
+        seen_in_documents = False
+        occurrence_count = 0
+        last_seen_date = None
+        
+        tc_normalized = normalize_reference_for_comparison(identifier)
+        
+        for ocr_norm, ocr_data in ocr_references.items():
+            if references_match(identifier, ocr_data["original"]) or tc_normalized == ocr_norm:
+                seen_in_documents = True
+                occurrence_count += ocr_data["count"]
+                
+                # Get most recent date
+                if ocr_data["dates"]:
+                    sorted_dates = sorted(ocr_data["dates"], reverse=True)
+                    if not last_seen_date or sorted_dates[0] > last_seen_date:
+                        last_seen_date = sorted_dates[0]
+        
+        items.append(TCvsOCRBadgeItem(
+            reference=identifier,
+            type=ref_type,
+            title=title,
+            seen_in_documents=seen_in_documents,
+            occurrence_count=occurrence_count,
+            last_seen_date=last_seen_date
+        ))
+    
+    # Sort by reference for deterministic output
+    items.sort(key=lambda x: x.reference)
+    
+    # Calculate counts
+    total_seen = sum(1 for item in items if item.seen_in_documents)
+    total_not_seen = len(items) - total_seen
+    
+    # Logging
+    logger.info(
+        f"[TC-VS-OCR] aircraft={aircraft_id} | "
+        f"TC refs={len(items)} | seen={total_seen} | not_seen={total_not_seen} | "
+        f"OCR docs={ocr_documents_analyzed}"
+    )
+    
+    return TCvsOCRBadgeResponse(
+        aircraft_id=aircraft_id,
+        registration=registration,
+        items=items,
+        total_tc_references=len(items),
+        total_seen=total_seen,
+        total_not_seen=total_not_seen,
+        ocr_documents_analyzed=ocr_documents_analyzed,
+        source="tc_imported_references"
+    )
