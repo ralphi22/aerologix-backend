@@ -618,6 +618,170 @@ class AeroLogixBackendTester:
         
         return success1 and success2
 
+    def test_counter_guard_implementation(self):
+        """Test Counter Guard implementation for aircraft hours"""
+        print("⚡ Testing Counter Guard Implementation...")
+        
+        # Get or create aircraft for testing
+        aircraft_id, registration = self.get_aircraft_list()
+        
+        if not aircraft_id:
+            self.log_test("Counter Guard test setup", False, "No aircraft available for testing")
+            return False
+        
+        # Test Scenario 1: Engine > Airframe should be normalized
+        print("📋 Test Scenario 1: Engine > Airframe normalization")
+        
+        # First set up baseline aircraft with known values
+        setup_success, setup_response = self.run_test(
+            "Setup aircraft with baseline hours",
+            "PUT",
+            f"api/aircraft/{aircraft_id}",
+            200,
+            data={
+                "airframe_hours": 1000.0,
+                "engine_hours": 900.0,
+                "propeller_hours": 800.0
+            }
+        )
+        
+        if not setup_success:
+            self.log_test("Counter Guard setup", False, "Failed to setup baseline aircraft hours")
+            return False
+        
+        # Test engine hours > airframe hours (should be normalized)
+        success1, response1 = self.run_test(
+            "Update engine_hours > airframe_hours (1200 > 1000)",
+            "PUT",
+            f"api/aircraft/{aircraft_id}",
+            200,
+            data={"engine_hours": 1200.0}
+        )
+        
+        if success1:
+            normalized_engine = response1.get("engine_hours")
+            airframe_hours = response1.get("airframe_hours")
+            
+            if normalized_engine == airframe_hours == 1000.0:
+                self.log_test(
+                    "Engine hours normalized to airframe",
+                    True,
+                    f"Engine hours correctly normalized from 1200 to {normalized_engine}"
+                )
+            else:
+                self.log_test(
+                    "Engine hours normalization failed",
+                    False,
+                    f"Expected engine_hours=1000, got {normalized_engine}"
+                )
+                return False
+        else:
+            return False
+        
+        # Test Scenario 2: Propeller > Airframe should be normalized
+        print("📋 Test Scenario 2: Propeller > Airframe normalization")
+        
+        success2, response2 = self.run_test(
+            "Update propeller_hours > airframe_hours (1500 > 1000)",
+            "PUT",
+            f"api/aircraft/{aircraft_id}",
+            200,
+            data={"propeller_hours": 1500.0}
+        )
+        
+        if success2:
+            normalized_propeller = response2.get("propeller_hours")
+            airframe_hours = response2.get("airframe_hours")
+            
+            if normalized_propeller == airframe_hours == 1000.0:
+                self.log_test(
+                    "Propeller hours normalized to airframe",
+                    True,
+                    f"Propeller hours correctly normalized from 1500 to {normalized_propeller}"
+                )
+            else:
+                self.log_test(
+                    "Propeller hours normalization failed",
+                    False,
+                    f"Expected propeller_hours=1000, got {normalized_propeller}"
+                )
+                return False
+        else:
+            return False
+        
+        # Test Scenario 3: Valid update should pass
+        print("📋 Test Scenario 3: Valid update (engine < airframe)")
+        
+        success3, response3 = self.run_test(
+            "Update engine_hours < airframe_hours (500 < 1000)",
+            "PUT",
+            f"api/aircraft/{aircraft_id}",
+            200,
+            data={"engine_hours": 500.0}
+        )
+        
+        if success3:
+            engine_hours = response3.get("engine_hours")
+            
+            if engine_hours == 500.0:
+                self.log_test(
+                    "Valid engine hours update accepted",
+                    True,
+                    f"Engine hours correctly set to {engine_hours}"
+                )
+            else:
+                self.log_test(
+                    "Valid engine hours update failed",
+                    False,
+                    f"Expected engine_hours=500, got {engine_hours}"
+                )
+                return False
+        else:
+            return False
+        
+        # Test Scenario 4: Updating airframe should allow higher engine
+        print("📋 Test Scenario 4: Airframe update allows higher engine")
+        
+        success4, response4 = self.run_test(
+            "Update airframe_hours=2000 AND engine_hours=1800",
+            "PUT",
+            f"api/aircraft/{aircraft_id}",
+            200,
+            data={
+                "airframe_hours": 2000.0,
+                "engine_hours": 1800.0
+            }
+        )
+        
+        if success4:
+            airframe_hours = response4.get("airframe_hours")
+            engine_hours = response4.get("engine_hours")
+            
+            if airframe_hours == 2000.0 and engine_hours == 1800.0:
+                self.log_test(
+                    "Airframe and engine hours update accepted",
+                    True,
+                    f"Airframe: {airframe_hours}, Engine: {engine_hours}"
+                )
+            else:
+                self.log_test(
+                    "Airframe and engine hours update failed",
+                    False,
+                    f"Expected airframe=2000, engine=1800, got airframe={airframe_hours}, engine={engine_hours}"
+                )
+                return False
+        else:
+            return False
+        
+        # All scenarios passed
+        self.log_test(
+            "Counter Guard implementation complete",
+            True,
+            "All 4 test scenarios passed: normalization, valid updates, and airframe expansion"
+        )
+        
+        return success1 and success2 and success3 and success4
+
     def run_all_tests(self):
         """Run all tests in sequence"""
         print("🚀 Starting AeroLogix AI Backend Tests")
