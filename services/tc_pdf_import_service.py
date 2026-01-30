@@ -329,7 +329,8 @@ class TCPDFImportService:
         2. Find valid CF-XXXX-XX references
         3. Store PDF (tc_pdf_imports)
         4. Create references (tc_imported_references)
-        5. Audit log
+        5. Collaborative detection (notify other users)
+        6. Audit log
         
         Returns:
             PDFImportResult with tc_pdf_id and imported_references_count
@@ -368,7 +369,36 @@ class TCPDFImportService:
                     user_id=user_id
                 )
             
-            # Step 5: Audit log
+            # Step 5: Collaborative detection - notify other users with same model
+            if references and refs_created > 0:
+                try:
+                    from services.collaborative_adsb_service import CollaborativeADSBService
+                    
+                    # Get aircraft model for collaborative detection
+                    aircraft = await self.db.aircrafts.find_one({"_id": aircraft_id})
+                    model = aircraft.get("model", "") if aircraft else ""
+                    
+                    if model:
+                        collab_service = CollaborativeADSBService(self.db)
+                        collab_result = await collab_service.process_imported_references(
+                            references=references,
+                            reference_type="AD",  # TC PDF imports are always AD
+                            aircraft_id=aircraft_id,
+                            user_id=user_id,
+                            model=model
+                        )
+                        
+                        if collab_result.new_references_count > 0:
+                            logger.info(
+                                f"[TC PDF IMPORT] Collaborative: {collab_result.new_references_count} new refs, "
+                                f"{collab_result.alerts_created_count} alerts, "
+                                f"{collab_result.users_notified} users notified"
+                            )
+                except Exception as e:
+                    # Don't fail import if collaborative detection fails
+                    logger.warning(f"[TC PDF IMPORT] Collaborative detection failed (non-blocking): {e}")
+            
+            # Step 6: Audit log
             await self.log_audit(
                 aircraft_id=aircraft_id,
                 user_id=user_id,
