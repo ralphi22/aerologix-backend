@@ -1656,28 +1656,33 @@ async def get_ocr_scan_adsb(
         extracted_data = scan.get("extracted_data", {})
         adsb_refs = extracted_data.get("ad_sb_references", [])
         
-        for ref in adsb_refs:
-            # Extract reference string
+        for ref_idx, ref in enumerate(adsb_refs):
+            # Extract reference string and metadata
             if isinstance(ref, dict):
                 raw_ref = ref.get("reference_number") or ref.get("identifier") or ref.get("ref") or ""
                 ref_type = ref.get("type", "").upper()
+                ref_title = ref.get("title") or ref.get("description")
+                ref_status = ref.get("status")
             elif isinstance(ref, str):
                 raw_ref = ref
                 ref_type = ""
+                ref_title = None
+                ref_status = None
             else:
                 continue
             
             if not raw_ref:
                 continue
             
-            # STRICT VALIDATION: Only CF-YYYY-NN pattern accepted
-            # Try to normalize to valid CF reference
+            # Normalize reference (supports CF, US, EU, FR formats)
             normalized = normalize_to_cf_reference(raw_ref)
             
             if not normalized:
-                # Invalid reference format - skip it
-                logger.debug(f"[OCR-SCAN AD/SB] Skipping invalid reference: {raw_ref} (not CF-YYYY-NN pattern)")
-                continue
+                # Keep the original reference even if not matching strict pattern
+                # This ensures all OCR-detected references are shown
+                normalized = normalize_adsb_reference(raw_ref)
+                if not normalized:
+                    continue
             
             # Detect type if not provided
             if ref_type not in ["AD", "SB"]:
