@@ -1,0 +1,119 @@
+{
+  "summary": {
+    "total_tests": 6,
+    "passed_tests": 5,
+    "success_rate": 83.33333333333334,
+    "timestamp": "2026-01-31T21:51:06.189180",
+    "test_focus": "AD/SB OCR Deletion Fix"
+  },
+  "detailed_results": [
+    {
+      "test_name": "Login with test user",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNTAxMDY2fQ.Zgai_e-J8v07S01MlSuut5kw2fzSVGa6QFiVAfA1I40",
+        "token_type": "bearer",
+        "user": {
+          "email": "test@aerologix.ca",
+          "name": "Test User",
+          "id": "1769733078496887",
+          "created_at": "2026-01-30T00:31:18.739000",
+          "subscription": {
+            "plan_code": "BASIC",
+            "plan": "BASIC",
+            "status": "active",
+            "stripe_customer_id": null,
+            "stripe_subscription_id": null,
+            "trial_end": null,
+            "current_period_end": null
+          },
+          "limits": {
+            "max_aircrafts": 1,
+            "ocr_per_month": 5,
+            "logbook_entries_per_month": 10,
+            "gps_logbook": false,
+            "tea_amo_sharing": false,
+            "invoices": false,
+            "cost_per_hour": false,
+            "prebuy": false,
+            "has_fleet_access": false,
+            "has_mechanic_sharing": false
+          }
+        }
+      },
+      "timestamp": "2026-01-31T21:51:06.169104"
+    },
+    {
+      "test_name": "Get aircraft list",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": [
+        {
+          "registration": "C-GTEST",
+          "aircraft_type": null,
+          "manufacturer": null,
+          "model": "172",
+          "year": 2020,
+          "serial_number": "TEST123456",
+          "airframe_hours": 2000.0,
+          "engine_hours": 1800.0,
+          "propeller_hours": 1000.0,
+          "photo_url": null,
+          "description": "Test update",
+          "purpose": "Non sp\u00e9cifi\u00e9",
+          "base_city": "Non sp\u00e9cifi\u00e9",
+          "adsb_has_new_tc_items": false,
+          "count_new_adsb": 0,
+          "last_tc_adsb_version": null,
+          "last_adsb_reviewed_at": null,
+          "_id": "1769733120179849",
+          "user_id": "1769733078496887",
+          "created_at": "2026-01-30T00:32:00.179000",
+          "updated_at": "2026-01-31T13:44:04.795000"
+        }
+      ],
+      "timestamp": "2026-01-31T21:51:06.179326"
+    },
+    {
+      "test_name": "Get OCR scan AD/SB for aircraft C-GTEST with new fields",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "aircraft_id": "1769733120179849",
+        "registration": "C-GTEST",
+        "items": [],
+        "total_unique_references": 0,
+        "total_ad": 0,
+        "total_sb": 0,
+        "documents_analyzed": 0,
+        "source": "scanned_documents",
+        "disclaimer": "These references were detected by OCR from scanned maintenance documents. This is DOCUMENTARY EVIDENCE ONLY, not a compliance assessment. Verify all information with original documents and a licensed AME."
+      },
+      "timestamp": "2026-01-31T21:51:06.185650"
+    },
+    {
+      "test_name": "OCR scan AD/SB new fields validation",
+      "success": true,
+      "details": "All 0 items have required new fields: id, reference, type, title, description, status, occurrence_count, record_ids",
+      "response_data": null,
+      "timestamp": "2026-01-31T21:51:06.185746"
+    },
+    {
+      "test_name": "Delete non-existent AD/SB record",
+      "success": true,
+      "details": "Status: 404",
+      "response_data": {
+        "detail": "AD/SB record not found"
+      },
+      "timestamp": "2026-01-31T21:51:06.189011"
+    },
+    {
+      "test_name": "DELETE adsb response structure",
+      "success": false,
+      "details": "Response should contain 'message' field",
+      "response_data": null,
+      "timestamp": "2026-01-31T21:51:06.189069"
+    }
+  ]
+}
