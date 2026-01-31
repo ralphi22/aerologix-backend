@@ -259,6 +259,8 @@ async def update_aircraft(
     updated_aircraft = await db.aircrafts.find_one({"_id": aircraft_id})
     logger.info(f"Aircraft {aircraft_id} updated for user {current_user.email}")
     
+    # Apply default values before returning
+    updated_aircraft = apply_default_values(updated_aircraft)
     return Aircraft(**updated_aircraft)
 
 @router.delete("/{aircraft_id}", status_code=status.HTTP_204_NO_CONTENT)
