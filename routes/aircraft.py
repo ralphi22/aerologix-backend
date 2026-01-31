@@ -61,6 +61,9 @@ async def create_aircraft(
         "propeller_hours": aircraft.propeller_hours,
         "photo_url": aircraft.photo_url,
         "description": aircraft.description,
+        # TC-sourced fields
+        "purpose": aircraft.purpose,
+        "base_city": aircraft.base_city,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow()
     }
