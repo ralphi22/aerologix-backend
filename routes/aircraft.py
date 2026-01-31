@@ -252,6 +252,97 @@ async def delete_aircraft(
     return None
 
 
+# ==================== TC DATA SYNC ====================
+
+@router.post("/{aircraft_id}/sync-tc-data")
+async def sync_tc_data(
+    aircraft_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    """
+    Synchronize aircraft data with Transport Canada database.
+    
+    Updates purpose, base_city, and other TC fields if available.
+    This does NOT overwrite user-entered data unless specified.
+    """
+    # Check if aircraft exists and belongs to user
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aircraft not found"
+        )
+    
+    registration = aircraft.get("registration")
+    if not registration:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Aircraft has no registration"
+        )
+    
+    # Fetch TC data
+    tc_data = await fetch_tc_data(db, registration)
+    
+    if not tc_data:
+        return {
+            "ok": True,
+            "synced": False,
+            "message": f"No TC data found for {registration}",
+            "fields_updated": []
+        }
+    
+    # Only update fields that are currently empty/null
+    update_data = {}
+    fields_updated = []
+    
+    # purpose
+    if tc_data.get("purpose") and not aircraft.get("purpose"):
+        update_data["purpose"] = tc_data["purpose"]
+        fields_updated.append("purpose")
+    
+    # base_city
+    if tc_data.get("base_city") and not aircraft.get("base_city"):
+        update_data["base_city"] = tc_data["base_city"]
+        fields_updated.append("base_city")
+    
+    # manufacturer
+    if tc_data.get("manufacturer") and not aircraft.get("manufacturer"):
+        update_data["manufacturer"] = tc_data["manufacturer"]
+        fields_updated.append("manufacturer")
+    
+    # model
+    if tc_data.get("model") and not aircraft.get("model"):
+        update_data["model"] = tc_data["model"]
+        fields_updated.append("model")
+    
+    # serial_number
+    if tc_data.get("serial_number") and not aircraft.get("serial_number"):
+        update_data["serial_number"] = tc_data["serial_number"]
+        fields_updated.append("serial_number")
+    
+    # Apply updates
+    if update_data:
+        update_data["updated_at"] = datetime.utcnow()
+        await db.aircrafts.update_one(
+            {"_id": aircraft_id},
+            {"$set": update_data}
+        )
+        logger.info(f"[TC SYNC] Aircraft {aircraft_id} updated with TC data: {fields_updated}")
+    
+    return {
+        "ok": True,
+        "synced": bool(update_data),
+        "message": f"TC data synced for {registration}" if update_data else "No new data to sync",
+        "fields_updated": fields_updated,
+        "tc_data": tc_data
+    }
+
+
 # ==================== FLIGHT TRACKING TOGGLE ====================
 
 @router.post("/{aircraft_id}/flight-tracking")
