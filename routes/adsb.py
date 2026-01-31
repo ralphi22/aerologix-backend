@@ -1467,20 +1467,19 @@ def normalize_adsb_reference(ref: str) -> str:
 
 def is_valid_cf_reference(ref: str) -> bool:
     """
-    Validate that reference matches STRICT CF-YYYY-NN pattern.
+    Validate that reference matches a known AD/SB format.
     
-    STRICT: Only CF-YYYY-NN pattern (^CF-\d{4}-\d{2,4}$)
+    Supported formats:
+    - CF (Canada): CF-YYYY-NN, CF-YY-NN (with optional R revision)
+    - US (FAA): YY-NN-NN, YYYY-NN-NN (with optional R revision)
+    - EU (EASA): YYYY-NNNN
+    - FR (France): F-YYYY-NNN (with optional R revision)
     
     Valid examples:
-    - CF-2024-01
-    - CF-2011-10
-    - CF-90-03 (will be normalized to CF-1990-03)
-    - CF-2011-1009
-    
-    Invalid examples:
-    - 2011-10-09 (no CF prefix)
-    - 72-03-03R3 (no CF prefix, has suffix)
-    - AD 2011-10-09 (wrong format)
+    - CF-2024-01, CF-90-03R2, CF-1987-15R4
+    - 80-11-04, 72-03-03R3, 2022-03-15
+    - 2009-0278, 2008-0183
+    - F-2005-023, F-2001-139R1
     """
     if not ref:
         return False
@@ -1490,31 +1489,38 @@ def is_valid_cf_reference(ref: str) -> bool:
     normalized = re.sub(r'[\s.]+', '-', normalized)
     normalized = normalized.strip('-')
     
-    # Add CF- prefix if it looks like a CF reference without prefix
-    if re.match(r'^\d{2,4}-\d{2,4}(-\d{2,4})?R?\d*$', normalized):
-        # Could be 90-03R2 or 2011-10-09 - check if first part looks like year
-        parts = normalized.split('-')
-        if len(parts) >= 2:
-            first_part = parts[0]
-            if len(first_part) == 2:
-                # Two digit year like 90 -> 1990
-                normalized = f"CF-{normalized}"
-            elif len(first_part) == 4 and first_part.startswith(('19', '20')):
-                # Four digit year
-                normalized = f"CF-{normalized}"
+    # Pattern 1: CF Canadian format - CF-YYYY-NN or CF-YY-NN (with optional revision)
+    cf_pattern = r'^CF-\d{2,4}-\d{1,4}(R\d*)?$'
+    if re.match(cf_pattern, normalized):
+        return True
     
-    # STRICT pattern: CF-YYYY-NN or CF-YY-NN (with optional R suffix for revisions)
-    # Matches: CF-2024-01, CF-90-03R2, CF-2011-10-09
-    strict_pattern = r'^CF-\d{2,4}-\d{2,4}(R\d*)?(-\d{2,4}(R\d*)?)?$'
+    # Pattern 2: US FAA format - YY-NN-NN or YYYY-NN-NN (with optional revision)
+    # Examples: 80-11-04, 72-03-03R3, 2022-03-15, 2016-16-12
+    us_pattern = r'^\d{2,4}-\d{2}-\d{2}(R\d*)?$'
+    if re.match(us_pattern, normalized):
+        return True
     
-    return bool(re.match(strict_pattern, normalized))
+    # Pattern 3: EU EASA format - YYYY-NNNN
+    # Examples: 2009-0278, 2008-0183
+    eu_pattern = r'^\d{4}-\d{4}$'
+    if re.match(eu_pattern, normalized):
+        return True
+    
+    # Pattern 4: French format - F-YYYY-NNN (with optional revision)
+    # Examples: F-2005-023, F-2001-139R1
+    fr_pattern = r'^F-\d{4}-\d{2,4}(R\d*)?$'
+    if re.match(fr_pattern, normalized):
+        return True
+    
+    return False
 
 
 def normalize_to_cf_reference(ref: str) -> Optional[str]:
     """
-    Normalize and validate reference to CF format.
+    Normalize and validate reference to standard format.
     
-    Returns normalized CF reference or None if invalid.
+    Returns normalized reference or None if invalid.
+    Preserves the original format type (CF, US, EU, FR).
     """
     if not ref:
         return None
@@ -1527,13 +1533,26 @@ def normalize_to_cf_reference(ref: str) -> Optional[str]:
     # Remove "AD" or "SB" prefix if present
     normalized = re.sub(r'^(AD|SB)[\s\-]*', '', normalized)
     
-    # Add CF- prefix if missing but looks like valid reference
-    if not normalized.startswith('CF-'):
-        # Check if it looks like a year-based reference
-        if re.match(r'^\d{2,4}-\d{2,4}', normalized):
-            normalized = f"CF-{normalized}"
+    # Try to add CF- prefix if it looks like a Canadian reference without prefix
+    # Only do this if it starts with a 2-digit year that could be Canadian
+    if not normalized.startswith(('CF-', 'F-')):
+        # Check if it's a US-style reference (valid as-is)
+        if re.match(r'^\d{2,4}-\d{2}-\d{2}(R\d*)?$', normalized):
+            # This is likely US format - keep as is
+            pass
+        # Check if it's EU format (valid as-is)
+        elif re.match(r'^\d{4}-\d{4}$', normalized):
+            # This is EU format - keep as is
+            pass
+        # Check if it could be a CF reference missing the prefix
+        elif re.match(r'^\d{2,4}-\d{1,4}(R\d*)?$', normalized):
+            # This might be a Canadian reference without CF- prefix
+            # Only add CF- if it looks like YY-NN format (not YY-NN-NN)
+            parts = normalized.split('-')
+            if len(parts) == 2 or (len(parts) == 2 and 'R' in parts[-1]):
+                normalized = f"CF-{normalized}"
     
-    # Validate against strict pattern
+    # Validate against all known patterns
     if is_valid_cf_reference(normalized):
         return normalized
     
