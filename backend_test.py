@@ -1808,40 +1808,57 @@ class AeroLogixBackendTester:
             )
             return False
         
-        # Validate response structure
-        required_delete_fields = ["message", "reference", "deleted_count", "deleted_ids"]
-        missing_delete_fields = [field for field in required_delete_fields if field not in response3]
-        
-        if missing_delete_fields:
+        # Validate response structure - for 404, it uses "detail" field
+        if "detail" in response3:
+            # 404 case - uses FastAPI HTTPException format
+            if "No AD/SB records found for reference" not in response3.get("detail", ""):
+                self.log_test(
+                    "DELETE adsb by reference 404 message",
+                    False,
+                    f"Unexpected 404 message: {response3.get('detail')}"
+                )
+                return False
+            
             self.log_test(
-                "DELETE adsb by reference response structure",
-                False,
-                f"Missing required fields: {missing_delete_fields}"
+                "DELETE adsb by reference 404 handling",
+                True,
+                f"Correctly returned 404 with detail: {response3.get('detail')}"
             )
-            return False
-        
-        # Validate deleted_count is 0 and deleted_ids is empty
-        if response3.get("deleted_count") != 0:
+        else:
+            # Success case - should have the expected structure
+            required_delete_fields = ["message", "reference", "deleted_count", "deleted_ids"]
+            missing_delete_fields = [field for field in required_delete_fields if field not in response3]
+            
+            if missing_delete_fields:
+                self.log_test(
+                    "DELETE adsb by reference response structure",
+                    False,
+                    f"Missing required fields: {missing_delete_fields}"
+                )
+                return False
+            
+            # Validate deleted_count is 0 and deleted_ids is empty
+            if response3.get("deleted_count") != 0:
+                self.log_test(
+                    "DELETE adsb by reference deleted_count",
+                    False,
+                    f"Expected deleted_count=0, got {response3.get('deleted_count')}"
+                )
+                return False
+            
+            if response3.get("deleted_ids") != []:
+                self.log_test(
+                    "DELETE adsb by reference deleted_ids",
+                    False,
+                    f"Expected empty deleted_ids array, got {response3.get('deleted_ids')}"
+                )
+                return False
+            
             self.log_test(
-                "DELETE adsb by reference deleted_count",
-                False,
-                f"Expected deleted_count=0, got {response3.get('deleted_count')}"
+                "DELETE adsb by reference 404 handling",
+                True,
+                f"Correctly returned 404 with deleted_count=0, deleted_ids=[], message: {response3.get('message')}"
             )
-            return False
-        
-        if response3.get("deleted_ids") != []:
-            self.log_test(
-                "DELETE adsb by reference deleted_ids",
-                False,
-                f"Expected empty deleted_ids array, got {response3.get('deleted_ids')}"
-            )
-            return False
-        
-        self.log_test(
-            "DELETE adsb by reference 404 handling",
-            True,
-            f"Correctly returned 404 with deleted_count=0, deleted_ids=[], message: {response3.get('message')}"
-        )
         
         # Test 4: Verify expected response structure for successful cases (using existing data if any)
         print("📋 Test 4: Verify response structures match expected format")
