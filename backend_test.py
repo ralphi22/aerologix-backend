@@ -1665,6 +1665,228 @@ class AeroLogixBackendTester:
         
         return success1 and success2 and success3 and success4
 
+    def test_adsb_ocr_deletion_fix(self):
+        """Test AD/SB OCR endpoints for the deletion fix as per review request"""
+        print("🔧 Testing AD/SB OCR Deletion Fix Endpoints...")
+        
+        # Get aircraft ID first
+        aircraft_id, registration = self.get_aircraft_list()
+        
+        if not aircraft_id:
+            self.log_test("AD/SB OCR deletion test setup", False, "No aircraft available for testing")
+            return False
+        
+        # Test 1: GET /api/adsb/ocr-scan/{aircraft_id} with new fields
+        print("📋 Test 1: GET /api/adsb/ocr-scan/{aircraft_id} with new fields")
+        success1, response1 = self.run_test(
+            f"Get OCR scan AD/SB for aircraft {registration} with new fields",
+            "GET",
+            f"api/adsb/ocr-scan/{aircraft_id}",
+            200
+        )
+        
+        if not success1:
+            return False
+        
+        # Validate response structure includes new fields
+        required_fields = ["aircraft_id", "items"]
+        missing_fields = [field for field in required_fields if field not in response1]
+        
+        if missing_fields:
+            self.log_test(
+                "OCR scan AD/SB response structure",
+                False,
+                f"Missing required fields: {missing_fields}"
+            )
+            return False
+        
+        # Validate items structure includes new fields
+        items = response1.get("items", [])
+        if not isinstance(items, list):
+            self.log_test(
+                "OCR scan AD/SB items format",
+                False,
+                f"Items should be an array, got {type(items)}"
+            )
+            return False
+        
+        # Check each item has the new required fields
+        for i, item in enumerate(items):
+            required_item_fields = [
+                "id", "reference", "type", "title", "description", 
+                "status", "occurrence_count", "record_ids"
+            ]
+            missing_item_fields = [field for field in required_item_fields if field not in item]
+            
+            if missing_item_fields:
+                self.log_test(
+                    f"OCR scan AD/SB item {i} new fields",
+                    False,
+                    f"Missing new fields: {missing_item_fields}"
+                )
+                return False
+            
+            # Validate field types
+            if item.get("id") is not None and not isinstance(item.get("id"), str):
+                self.log_test(
+                    f"OCR scan AD/SB item {i} id field type",
+                    False,
+                    f"id should be string or null, got {type(item.get('id'))}"
+                )
+                return False
+            
+            if not isinstance(item.get("occurrence_count"), int):
+                self.log_test(
+                    f"OCR scan AD/SB item {i} occurrence_count type",
+                    False,
+                    f"occurrence_count should be int, got {type(item.get('occurrence_count'))}"
+                )
+                return False
+            
+            if not isinstance(item.get("record_ids"), list):
+                self.log_test(
+                    f"OCR scan AD/SB item {i} record_ids type",
+                    False,
+                    f"record_ids should be list, got {type(item.get('record_ids'))}"
+                )
+                return False
+        
+        self.log_test(
+            "OCR scan AD/SB new fields validation",
+            True,
+            f"All {len(items)} items have required new fields: id, reference, type, title, description, status, occurrence_count, record_ids"
+        )
+        
+        # Test 2: DELETE /api/adsb/{adsb_id} - should return 404 for non-existent ID
+        print("📋 Test 2: DELETE /api/adsb/{adsb_id} - 404 for non-existent ID")
+        fake_adsb_id = "507f1f77bcf86cd799439011"  # Valid ObjectId format but non-existent
+        success2, response2 = self.run_test(
+            "Delete non-existent AD/SB record",
+            "DELETE",
+            f"api/adsb/{fake_adsb_id}",
+            404
+        )
+        
+        if not success2:
+            self.log_test(
+                "DELETE adsb 404 test",
+                False,
+                "Expected 404 for non-existent AD/SB ID"
+            )
+            return False
+        
+        # Validate response structure
+        if "message" not in response2:
+            self.log_test(
+                "DELETE adsb response structure",
+                False,
+                "Response should contain 'message' field"
+            )
+            return False
+        
+        self.log_test(
+            "DELETE adsb 404 handling",
+            True,
+            f"Correctly returned 404 with message: {response2.get('message')}"
+        )
+        
+        # Test 3: DELETE /api/adsb/ocr/{aircraft_id}/reference/{reference} - should return 404 for non-existent reference
+        print("📋 Test 3: DELETE /api/adsb/ocr/{aircraft_id}/reference/{reference} - 404 for non-existent reference")
+        fake_reference = "AD%202011-10-09"  # URL encoded reference that doesn't exist
+        success3, response3 = self.run_test(
+            f"Delete non-existent AD/SB reference for aircraft {registration}",
+            "DELETE",
+            f"api/adsb/ocr/{aircraft_id}/reference/{fake_reference}",
+            404
+        )
+        
+        if not success3:
+            self.log_test(
+                "DELETE adsb by reference 404 test",
+                False,
+                "Expected 404 for non-existent AD/SB reference"
+            )
+            return False
+        
+        # Validate response structure
+        required_delete_fields = ["message", "reference", "deleted_count", "deleted_ids"]
+        missing_delete_fields = [field for field in required_delete_fields if field not in response3]
+        
+        if missing_delete_fields:
+            self.log_test(
+                "DELETE adsb by reference response structure",
+                False,
+                f"Missing required fields: {missing_delete_fields}"
+            )
+            return False
+        
+        # Validate deleted_count is 0 and deleted_ids is empty
+        if response3.get("deleted_count") != 0:
+            self.log_test(
+                "DELETE adsb by reference deleted_count",
+                False,
+                f"Expected deleted_count=0, got {response3.get('deleted_count')}"
+            )
+            return False
+        
+        if response3.get("deleted_ids") != []:
+            self.log_test(
+                "DELETE adsb by reference deleted_ids",
+                False,
+                f"Expected empty deleted_ids array, got {response3.get('deleted_ids')}"
+            )
+            return False
+        
+        self.log_test(
+            "DELETE adsb by reference 404 handling",
+            True,
+            f"Correctly returned 404 with deleted_count=0, deleted_ids=[], message: {response3.get('message')}"
+        )
+        
+        # Test 4: Verify expected response structure for successful cases (using existing data if any)
+        print("📋 Test 4: Verify response structures match expected format")
+        
+        # Expected response structure validation for OCR scan
+        expected_ocr_structure = {
+            "aircraft_id": aircraft_id,
+            "items": [
+                {
+                    "id": "6958685bed5ab98a7c8a8d13",  # Example MongoDB _id or null
+                    "reference": "AD-2011-10-09",
+                    "type": "AD",
+                    "title": "...",
+                    "description": "...",
+                    "status": "COMPLIED",
+                    "occurrence_count": 2,
+                    "record_ids": ["id1", "id2"]
+                }
+            ]
+        }
+        
+        # Validate the actual response matches expected structure
+        if response1.get("aircraft_id") != aircraft_id:
+            self.log_test(
+                "OCR scan response aircraft_id",
+                False,
+                f"Expected aircraft_id={aircraft_id}, got {response1.get('aircraft_id')}"
+            )
+            return False
+        
+        self.log_test(
+            "OCR scan response structure validation",
+            True,
+            f"Response structure matches expected format with aircraft_id and items array containing new fields"
+        )
+        
+        # All tests passed
+        self.log_test(
+            "AD/SB OCR deletion fix endpoints complete",
+            True,
+            "All 4 test scenarios passed: (1) GET ocr-scan with new fields, (2) DELETE adsb 404 handling, (3) DELETE by reference 404 handling, (4) Response structure validation"
+        )
+        
+        return success1 and success2 and success3
+
     def test_tc_import_endpoints(self):
         """Test TC Import endpoints for regression testing"""
         print("📋 Testing TC Import Endpoints...")
