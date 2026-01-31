@@ -1370,6 +1370,250 @@ class AeroLogixBackendTester:
         
         return success1 and success2 and success3 and alert_management_success and success6
 
+    def test_aircraft_purpose_and_base_city(self):
+        """Test Aircraft API with purpose and base_city fields"""
+        print("✈️ Testing Aircraft Purpose and Base City Fields...")
+        
+        # Test 1: GET /api/aircraft - verify response includes purpose and base_city fields
+        print("📋 Test 1: GET /api/aircraft includes purpose and base_city fields")
+        success1, response1 = self.run_test(
+            "Get aircraft list with purpose and base_city fields",
+            "GET",
+            "api/aircraft",
+            200
+        )
+        
+        if not success1:
+            return False
+        
+        # Validate response structure
+        if not isinstance(response1, list):
+            self.log_test(
+                "Aircraft list format",
+                False,
+                f"Expected list, got {type(response1)}"
+            )
+            return False
+        
+        # Check if we have aircraft, if not create one for testing
+        if len(response1) == 0:
+            print("ℹ️ No aircraft found, creating test aircraft for purpose/base_city testing...")
+            aircraft_id = self.create_test_aircraft()
+            if not aircraft_id:
+                self.log_test("Aircraft creation for purpose test", False, "Failed to create test aircraft")
+                return False
+            
+            # Get the aircraft list again
+            success1, response1 = self.run_test(
+                "Get aircraft list after creation",
+                "GET",
+                "api/aircraft",
+                200
+            )
+            
+            if not success1 or len(response1) == 0:
+                return False
+        
+        # Validate that aircraft objects include purpose and base_city fields
+        first_aircraft = response1[0]
+        aircraft_id = first_aircraft.get('_id') or first_aircraft.get('id')
+        
+        # Check if purpose and base_city fields are present (can be null)
+        if 'purpose' not in first_aircraft:
+            self.log_test(
+                "Aircraft purpose field presence",
+                False,
+                "purpose field missing from aircraft response"
+            )
+            return False
+        
+        if 'base_city' not in first_aircraft:
+            self.log_test(
+                "Aircraft base_city field presence",
+                False,
+                "base_city field missing from aircraft response"
+            )
+            return False
+        
+        self.log_test(
+            "Aircraft list includes purpose and base_city fields",
+            True,
+            f"Aircraft {first_aircraft.get('registration')} has purpose='{first_aircraft.get('purpose')}', base_city='{first_aircraft.get('base_city')}'"
+        )
+        
+        # Test 2: POST /api/aircraft with purpose and base_city
+        print("📋 Test 2: Create aircraft with purpose and base_city")
+        
+        test_registration = "C-TEST"
+        success2, response2 = self.run_test(
+            "Create aircraft with purpose and base_city",
+            "POST",
+            "api/aircraft",
+            201,
+            data={
+                "registration": test_registration,
+                "manufacturer": "Cessna",
+                "model": "172M",
+                "purpose": "Privé",
+                "base_city": "Joliette, CSG3"
+            }
+        )
+        
+        if not success2:
+            # Check if aircraft already exists
+            if "already exists" in str(response2):
+                print("ℹ️ Test aircraft already exists, using existing aircraft for testing...")
+                # Find the existing aircraft
+                existing_aircraft = None
+                for aircraft in response1:
+                    if aircraft.get('registration') == test_registration:
+                        existing_aircraft = aircraft
+                        break
+                
+                if existing_aircraft:
+                    response2 = existing_aircraft
+                    success2 = True
+                else:
+                    self.log_test("Find existing test aircraft", False, "Could not find existing test aircraft")
+                    return False
+            else:
+                return False
+        
+        # Validate created aircraft has purpose and base_city
+        if success2:
+            created_aircraft_id = response2.get('_id') or response2.get('id')
+            
+            if response2.get('purpose') != "Privé":
+                self.log_test(
+                    "Created aircraft purpose validation",
+                    False,
+                    f"Expected purpose='Privé', got '{response2.get('purpose')}'"
+                )
+                return False
+            
+            if response2.get('base_city') != "Joliette, CSG3":
+                self.log_test(
+                    "Created aircraft base_city validation",
+                    False,
+                    f"Expected base_city='Joliette, CSG3', got '{response2.get('base_city')}'"
+                )
+                return False
+            
+            self.log_test(
+                "Aircraft created with purpose and base_city",
+                True,
+                f"Aircraft {test_registration} created with purpose='{response2.get('purpose')}', base_city='{response2.get('base_city')}'"
+            )
+        
+        # Test 3: PUT /api/aircraft/{aircraft_id} with purpose and base_city
+        print("📋 Test 3: Update aircraft with purpose and base_city")
+        
+        # Use the first aircraft from the list for update test
+        update_aircraft_id = aircraft_id
+        
+        success3, response3 = self.run_test(
+            f"Update aircraft {update_aircraft_id} with purpose and base_city",
+            "PUT",
+            f"api/aircraft/{update_aircraft_id}",
+            200,
+            data={
+                "purpose": "Privé",
+                "base_city": "Joliette, CSG3"
+            }
+        )
+        
+        if not success3:
+            return False
+        
+        # Validate updated aircraft
+        if response3.get('purpose') != "Privé":
+            self.log_test(
+                "Updated aircraft purpose validation",
+                False,
+                f"Expected purpose='Privé', got '{response3.get('purpose')}'"
+            )
+            return False
+        
+        if response3.get('base_city') != "Joliette, CSG3":
+            self.log_test(
+                "Updated aircraft base_city validation",
+                False,
+                f"Expected base_city='Joliette, CSG3', got '{response3.get('base_city')}'"
+            )
+            return False
+        
+        self.log_test(
+            "Aircraft updated with purpose and base_city",
+            True,
+            f"Aircraft {update_aircraft_id} updated with purpose='{response3.get('purpose')}', base_city='{response3.get('base_city')}'"
+        )
+        
+        # Test 4: POST /api/aircraft/{aircraft_id}/sync-tc-data
+        print("📋 Test 4: Sync TC Data endpoint")
+        
+        success4, response4 = self.run_test(
+            f"Sync TC data for aircraft {update_aircraft_id}",
+            "POST",
+            f"api/aircraft/{update_aircraft_id}/sync-tc-data",
+            200
+        )
+        
+        if not success4:
+            return False
+        
+        # Validate sync-tc-data response structure
+        required_sync_fields = ["ok", "synced", "message", "fields_updated", "tc_data"]
+        missing_sync_fields = [field for field in required_sync_fields if field not in response4]
+        
+        if missing_sync_fields:
+            self.log_test(
+                "Sync TC data response structure",
+                False,
+                f"Missing required fields: {missing_sync_fields}"
+            )
+            return False
+        
+        # Validate field types
+        if not isinstance(response4.get("ok"), bool):
+            self.log_test(
+                "Sync TC data ok field type",
+                False,
+                f"ok should be boolean, got {type(response4.get('ok'))}"
+            )
+            return False
+        
+        if not isinstance(response4.get("synced"), bool):
+            self.log_test(
+                "Sync TC data synced field type",
+                False,
+                f"synced should be boolean, got {type(response4.get('synced'))}"
+            )
+            return False
+        
+        if not isinstance(response4.get("fields_updated"), list):
+            self.log_test(
+                "Sync TC data fields_updated type",
+                False,
+                f"fields_updated should be list, got {type(response4.get('fields_updated'))}"
+            )
+            return False
+        
+        if not isinstance(response4.get("tc_data"), dict):
+            self.log_test(
+                "Sync TC data tc_data type",
+                False,
+                f"tc_data should be dict, got {type(response4.get('tc_data'))}"
+            )
+            return False
+        
+        self.log_test(
+            "Sync TC data endpoint validation",
+            True,
+            f"All validations passed. ok={response4.get('ok')}, synced={response4.get('synced')}, fields_updated={response4.get('fields_updated')}"
+        )
+        
+        return success1 and success2 and success3 and success4
+
     def test_tc_import_endpoints(self):
         """Test TC Import endpoints for regression testing"""
         print("📋 Testing TC Import Endpoints...")
