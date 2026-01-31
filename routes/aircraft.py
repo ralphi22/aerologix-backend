@@ -12,6 +12,31 @@ import re
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/aircraft", tags=["aircraft"])
 
+# Default values for TC fields
+DEFAULT_PURPOSE = "Non spécifié"
+DEFAULT_BASE_CITY = "Non spécifié"
+
+
+def apply_default_values(aircraft_doc: dict) -> dict:
+    """
+    Apply default values for TC fields if they are null or missing.
+    
+    Ensures purpose and base_city are ALWAYS present in the response.
+    """
+    if aircraft_doc is None:
+        return aircraft_doc
+    
+    # Ensure purpose has a value
+    if not aircraft_doc.get("purpose"):
+        aircraft_doc["purpose"] = DEFAULT_PURPOSE
+    
+    # Ensure base_city has a value
+    if not aircraft_doc.get("base_city"):
+        aircraft_doc["base_city"] = DEFAULT_BASE_CITY
+    
+    return aircraft_doc
+
+
 def format_registration(registration: str) -> str:
     """Format registration to uppercase"""
     return registration.upper().strip()
