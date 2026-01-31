@@ -2177,32 +2177,53 @@ class AeroLogixBackendTester:
         return self.tests_passed == self.tests_run
 
 def main():
-    """Main test runner"""
+    """Main test runner for AD/SB OCR deletion fix"""
+    print("🚀 AeroLogix Backend Testing - AD/SB OCR Deletion Fix")
+    print("=" * 60)
+    
     tester = AeroLogixBackendTester()
     
+    # Test authentication first
+    if not tester.test_authentication():
+        print("❌ Authentication failed. Cannot proceed with tests.")
+        return 1
+    
+    print("✅ Authentication successful. Proceeding with AD/SB OCR deletion tests...")
+    print()
+    
+    # Run the specific AD/SB OCR deletion fix test
+    success = tester.test_adsb_ocr_deletion_fix()
+    
+    # Print summary
+    print("=" * 60)
+    print("📊 TEST SUMMARY")
+    print("=" * 60)
+    print(f"Tests Run: {tester.tests_run}")
+    print(f"Tests Passed: {tester.tests_passed}")
+    print(f"Success Rate: {(tester.tests_passed/tester.tests_run*100):.1f}%" if tester.tests_run > 0 else "0%")
+    
+    if success:
+        print("✅ AD/SB OCR deletion fix endpoints are working correctly!")
+    else:
+        print("❌ AD/SB OCR deletion fix endpoints have issues!")
+    
+    # Save detailed test results
     try:
-        success = tester.run_all_tests()
-        
-        # Save detailed test results
-        with open('/app/test_reports/tc_adsb_backend_test_results.json', 'w') as f:
+        with open('/app/test_reports/adsb_ocr_deletion_test_results.json', 'w') as f:
             json.dump({
                 'summary': {
                     'total_tests': tester.tests_run,
                     'passed_tests': tester.tests_passed,
                     'success_rate': (tester.tests_passed/tester.tests_run)*100 if tester.tests_run > 0 else 0,
-                    'timestamp': datetime.now().isoformat()
+                    'timestamp': datetime.now().isoformat(),
+                    'test_focus': 'AD/SB OCR Deletion Fix'
                 },
                 'detailed_results': tester.test_results
             }, f, indent=2)
-        
-        return 0 if success else 1
-        
-    except KeyboardInterrupt:
-        print("\n⚠️ Tests interrupted by user")
-        return 1
     except Exception as e:
-        print(f"\n❌ Test runner failed: {e}")
-        return 1
+        print(f"Warning: Could not save test results: {e}")
+    
+    return 0 if success else 1
 
 if __name__ == "__main__":
     sys.exit(main())
