@@ -1308,13 +1308,18 @@ async def aircraft_adsb_structured_alias(
 
 class OCRScanADSBItem(BaseModel):
     """Single AD/SB reference detected from scanned documents"""
+    id: Optional[str] = None  # MongoDB _id of the most recent record (if from adsb_records)
     reference: str
     type: str  # "AD" or "SB"
+    title: Optional[str] = None  # Title/description of the AD/SB
+    description: Optional[str] = None  # Additional description
+    status: Optional[str] = None  # COMPLIED, PENDING, etc.
     occurrence_count: int  # Number of scanned documents where this reference appears
     source: str = "scanned_documents"
     first_seen_date: Optional[str] = None  # Earliest detection date
     last_seen_date: Optional[str] = None  # Most recent detection date
     scan_ids: List[str] = []  # List of OCR scan IDs where detected
+    record_ids: List[str] = []  # List of adsb_records _ids for this reference
 
 
 class OCRScanADSBResponse(BaseModel):
