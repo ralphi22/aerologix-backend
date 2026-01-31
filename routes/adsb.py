@@ -1742,13 +1742,14 @@ async def get_ocr_scan_adsb(
         if not raw_ref:
             continue
         
-        # STRICT VALIDATION: Only CF-YYYY-NN pattern accepted
+        # Try to normalize - accept all formats (CF, US, EU, FR)
         normalized = normalize_to_cf_reference(raw_ref)
         
         if not normalized:
-            # Invalid reference format - skip it
-            logger.debug(f"[OCR-SCAN AD/SB] Skipping invalid adsb_record reference: {raw_ref}")
-            continue
+            # Fallback to basic normalization for non-standard references
+            normalized = normalize_adsb_reference(raw_ref)
+            if not normalized:
+                continue
         
         # Initialize or update aggregation
         if normalized not in aggregation:
@@ -1770,9 +1771,9 @@ async def get_ocr_scan_adsb(
             # Add record_id to list
             if record_id not in agg["record_ids"]:
                 agg["record_ids"].append(record_id)
-            # Update id to most recent if not set
-            if not agg["id"]:
-                agg["id"] = record_id
+            # Update id to most recent if has adsb_record id (preferred)
+            if record_id and (not agg["id"] or not agg["id"].startswith("17")):
+                agg["id"] = record_id  # Prefer adsb_record id over scan_id
             # Update title/description if not set
             if title and not agg["title"]:
                 agg["title"] = title
