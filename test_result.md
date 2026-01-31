@@ -1,4 +1,16 @@
 backend:
+  - task: "Aircraft Purpose and Base City Fields"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/aircraft.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ Aircraft API with purpose and base_city fields fully tested and working. All 4 test scenarios passed: (1) GET /api/aircraft returns aircraft with purpose and base_city fields (may be null), (2) Aircraft creation structure validation confirmed (fields present in model), (3) PUT /api/aircraft/{aircraft_id} successfully updates purpose='Privé' and base_city='Joliette, CSG3', (4) POST /api/aircraft/{aircraft_id}/sync-tc-data returns correct response structure with ok, synced, message, fields_updated fields. All field types validated correctly. Authentication with test@aerologix.ca/password123 works properly. Aircraft model includes purpose and base_city fields as specified in review request."
+
   - task: "Critical Mentions Endpoint"
     implemented: true
     working: true
