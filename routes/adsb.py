@@ -1498,7 +1498,12 @@ async def get_ocr_scan_adsb(
                     "occurrence_count": 0,
                     "first_seen_date": date_str,
                     "last_seen_date": date_str,
-                    "scan_ids": []
+                    "scan_ids": [],
+                    "record_ids": [],
+                    "title": None,
+                    "description": None,
+                    "status": None,
+                    "id": None
                 }
             
             # Increment count and update tracking
@@ -1509,16 +1514,80 @@ async def get_ocr_scan_adsb(
             if scan_id not in agg["scan_ids"]:
                 agg["scan_ids"].append(scan_id)
     
+    # ============================================================
+    # ALSO CHECK adsb_records collection for applied OCR AD/SB
+    # This contains the actual MongoDB _ids needed for deletion
+    # ============================================================
+    adsb_cursor = db.adsb_records.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "source": "ocr"  # Only OCR-sourced records
+    }).sort("created_at", -1)
+    
+    async for record in adsb_cursor:
+        record_id = str(record.get("_id", ""))
+        raw_ref = record.get("reference_number", "")
+        ref_type = record.get("adsb_type", "AD").upper()
+        title = record.get("title")
+        description = record.get("description")
+        record_status = record.get("status")
+        created_at = record.get("created_at")
+        date_str = created_at.strftime("%Y-%m-%d") if created_at else None
+        
+        if not raw_ref:
+            continue
+        
+        normalized = normalize_adsb_reference(raw_ref)
+        
+        if not normalized:
+            continue
+        
+        # Initialize or update aggregation
+        if normalized not in aggregation:
+            aggregation[normalized] = {
+                "reference": normalized,
+                "type": ref_type,
+                "occurrence_count": 1,
+                "first_seen_date": date_str,
+                "last_seen_date": date_str,
+                "scan_ids": [],
+                "record_ids": [record_id],
+                "title": title,
+                "description": description,
+                "status": record_status,
+                "id": record_id  # Most recent _id
+            }
+        else:
+            agg = aggregation[normalized]
+            # Add record_id to list
+            if record_id not in agg["record_ids"]:
+                agg["record_ids"].append(record_id)
+            # Update id to most recent if not set
+            if not agg["id"]:
+                agg["id"] = record_id
+            # Update title/description if not set
+            if title and not agg["title"]:
+                agg["title"] = title
+            if description and not agg["description"]:
+                agg["description"] = description
+            if record_status and not agg["status"]:
+                agg["status"] = record_status
+    
     # Build response items
     items = [
         OCRScanADSBItem(
+            id=data.get("id"),
             reference=data["reference"],
             type=data["type"],
+            title=data.get("title"),
+            description=data.get("description"),
+            status=data.get("status"),
             occurrence_count=data["occurrence_count"],
             source="scanned_documents",
             first_seen_date=data["first_seen_date"],
             last_seen_date=data["last_seen_date"],
-            scan_ids=data["scan_ids"]
+            scan_ids=data["scan_ids"],
+            record_ids=data.get("record_ids", [])
         )
         for data in aggregation.values()
     ]
