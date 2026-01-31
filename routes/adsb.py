@@ -1651,10 +1651,13 @@ async def get_ocr_scan_adsb(
             if not raw_ref:
                 continue
             
-            # Normalize reference
-            normalized = normalize_adsb_reference(raw_ref)
+            # STRICT VALIDATION: Only CF-YYYY-NN pattern accepted
+            # Try to normalize to valid CF reference
+            normalized = normalize_to_cf_reference(raw_ref)
             
             if not normalized:
+                # Invalid reference format - skip it
+                logger.debug(f"[OCR-SCAN AD/SB] Skipping invalid reference: {raw_ref} (not CF-YYYY-NN pattern)")
                 continue
             
             # Detect type if not provided
@@ -1688,6 +1691,7 @@ async def get_ocr_scan_adsb(
     # ============================================================
     # ALSO CHECK adsb_records collection for applied OCR AD/SB
     # This contains the actual MongoDB _ids needed for deletion
+    # STRICT: Only include records with valid CF-YYYY-NN references
     # ============================================================
     adsb_cursor = db.adsb_records.find({
         "aircraft_id": aircraft_id,
