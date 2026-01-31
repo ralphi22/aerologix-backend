@@ -1465,6 +1465,81 @@ def normalize_adsb_reference(ref: str) -> str:
     return normalized
 
 
+def is_valid_cf_reference(ref: str) -> bool:
+    """
+    Validate that reference matches STRICT CF-YYYY-NN pattern.
+    
+    STRICT: Only CF-YYYY-NN pattern (^CF-\d{4}-\d{2,4}$)
+    
+    Valid examples:
+    - CF-2024-01
+    - CF-2011-10
+    - CF-90-03 (will be normalized to CF-1990-03)
+    - CF-2011-1009
+    
+    Invalid examples:
+    - 2011-10-09 (no CF prefix)
+    - 72-03-03R3 (no CF prefix, has suffix)
+    - AD 2011-10-09 (wrong format)
+    """
+    if not ref:
+        return False
+    
+    # Normalize first
+    normalized = ref.strip().upper()
+    normalized = re.sub(r'[\s.]+', '-', normalized)
+    normalized = normalized.strip('-')
+    
+    # Add CF- prefix if it looks like a CF reference without prefix
+    if re.match(r'^\d{2,4}-\d{2,4}(-\d{2,4})?R?\d*$', normalized):
+        # Could be 90-03R2 or 2011-10-09 - check if first part looks like year
+        parts = normalized.split('-')
+        if len(parts) >= 2:
+            first_part = parts[0]
+            if len(first_part) == 2:
+                # Two digit year like 90 -> 1990
+                normalized = f"CF-{normalized}"
+            elif len(first_part) == 4 and first_part.startswith(('19', '20')):
+                # Four digit year
+                normalized = f"CF-{normalized}"
+    
+    # STRICT pattern: CF-YYYY-NN or CF-YY-NN (with optional R suffix for revisions)
+    # Matches: CF-2024-01, CF-90-03R2, CF-2011-10-09
+    strict_pattern = r'^CF-\d{2,4}-\d{2,4}(R\d*)?(-\d{2,4}(R\d*)?)?$'
+    
+    return bool(re.match(strict_pattern, normalized))
+
+
+def normalize_to_cf_reference(ref: str) -> Optional[str]:
+    """
+    Normalize and validate reference to CF format.
+    
+    Returns normalized CF reference or None if invalid.
+    """
+    if not ref:
+        return None
+    
+    # Normalize
+    normalized = ref.strip().upper()
+    normalized = re.sub(r'[\s.]+', '-', normalized)
+    normalized = normalized.strip('-')
+    
+    # Remove "AD" or "SB" prefix if present
+    normalized = re.sub(r'^(AD|SB)[\s\-]*', '', normalized)
+    
+    # Add CF- prefix if missing but looks like valid reference
+    if not normalized.startswith('CF-'):
+        # Check if it looks like a year-based reference
+        if re.match(r'^\d{2,4}-\d{2,4}', normalized):
+            normalized = f"CF-{normalized}"
+    
+    # Validate against strict pattern
+    if is_valid_cf_reference(normalized):
+        return normalized
+    
+    return None
+
+
 def detect_adsb_type(reference: str) -> str:
     """
     Detect if reference is AD or SB based on common patterns.
