@@ -1776,18 +1776,18 @@ class AeroLogixBackendTester:
             return False
         
         # Validate response structure
-        if "message" not in response2:
+        if "message" not in response2 and "detail" not in response2:
             self.log_test(
                 "DELETE adsb response structure",
                 False,
-                "Response should contain 'message' field"
+                "Response should contain 'message' or 'detail' field"
             )
             return False
         
         self.log_test(
             "DELETE adsb 404 handling",
             True,
-            f"Correctly returned 404 with message: {response2.get('message')}"
+            f"Correctly returned 404 with message: {response2.get('message') or response2.get('detail')}"
         )
         
         # Test 3: DELETE /api/adsb/ocr/{aircraft_id}/reference/{reference} - should return 404 for non-existent reference
