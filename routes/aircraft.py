@@ -5,8 +5,9 @@ from models.aircraft import Aircraft, AircraftCreate, AircraftUpdate
 from models.user import User
 from routes.auth import get_current_user
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/aircraft", tags=["aircraft"])
@@ -14,6 +15,63 @@ router = APIRouter(prefix="/api/aircraft", tags=["aircraft"])
 def format_registration(registration: str) -> str:
     """Format registration to uppercase"""
     return registration.upper().strip()
+
+
+def normalize_registration_for_tc(registration: str) -> str:
+    """
+    Normalize registration for TC lookup.
+    Input: C-FGSO or CFGSO or FGSO
+    Output: CFGSO
+    """
+    reg = registration.strip().upper().replace("-", "")
+    if not reg.startswith("C") and reg.isalpha():
+        reg = "C" + reg
+    return reg
+
+
+async def fetch_tc_data(db, registration: str) -> dict:
+    """
+    Fetch TC data for a registration.
+    
+    Returns dict with purpose and base_city from TC database.
+    """
+    try:
+        reg_norm = normalize_registration_for_tc(registration)
+        
+        # Query TC aircraft collection
+        tc_doc = await db.tc_aircraft.find_one({"registration_norm": reg_norm})
+        
+        if not tc_doc:
+            # Try alternative field names (French)
+            tc_doc = await db.tc_aircraft.find_one({"immatriculation": reg_norm})
+        
+        if not tc_doc:
+            logger.info(f"[TC LOOKUP] No TC data found for {reg_norm}")
+            return {}
+        
+        # Map French fields to English
+        def get_field(*keys):
+            for key in keys:
+                if key in tc_doc and tc_doc[key]:
+                    return tc_doc[key]
+            return None
+        
+        result = {
+            "purpose": get_field("but", "purpose"),
+            "base_city": get_field("aéroport de la ville", "city_airport"),
+            "manufacturer": get_field("constructeur", "manufacturer"),
+            "model": get_field("modèle", "model"),
+            "serial_number": get_field("numéro_de_série", "serial_number"),
+            "year": get_field("date_fabrication", "year"),
+        }
+        
+        logger.info(f"[TC LOOKUP] Found TC data for {reg_norm}: purpose={result.get('purpose')}, base_city={result.get('base_city')}")
+        
+        return {k: v for k, v in result.items() if v is not None}
+        
+    except Exception as e:
+        logger.warning(f"[TC LOOKUP] Error fetching TC data: {e}")
+        return {}
 
 @router.post("", response_model=Aircraft, status_code=status.HTTP_201_CREATED)
 async def create_aircraft(
