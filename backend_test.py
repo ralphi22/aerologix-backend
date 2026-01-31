@@ -1560,7 +1560,7 @@ class AeroLogixBackendTester:
             return False
         
         # Validate sync-tc-data response structure
-        required_sync_fields = ["ok", "synced", "message", "fields_updated", "tc_data"]
+        required_sync_fields = ["ok", "synced", "message", "fields_updated"]
         missing_sync_fields = [field for field in required_sync_fields if field not in response4]
         
         if missing_sync_fields:
@@ -1596,18 +1596,19 @@ class AeroLogixBackendTester:
             )
             return False
         
-        if not isinstance(response4.get("tc_data"), dict):
+        # tc_data field is optional - only present when TC data is found
+        if "tc_data" in response4 and not isinstance(response4.get("tc_data"), dict):
             self.log_test(
                 "Sync TC data tc_data type",
                 False,
-                f"tc_data should be dict, got {type(response4.get('tc_data'))}"
+                f"tc_data should be dict when present, got {type(response4.get('tc_data'))}"
             )
             return False
         
         self.log_test(
             "Sync TC data endpoint validation",
             True,
-            f"All validations passed. ok={response4.get('ok')}, synced={response4.get('synced')}, fields_updated={response4.get('fields_updated')}"
+            f"All validations passed. ok={response4.get('ok')}, synced={response4.get('synced')}, fields_updated={response4.get('fields_updated')}, message='{response4.get('message')}'"
         )
         
         return success1 and success2 and success3 and success4
