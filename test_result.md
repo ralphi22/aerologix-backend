@@ -10,6 +10,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "✅ Aircraft API with purpose and base_city fields fully tested and working. All 4 test scenarios passed: (1) GET /api/aircraft returns aircraft with purpose and base_city fields (may be null), (2) Aircraft creation structure validation confirmed (fields present in model), (3) PUT /api/aircraft/{aircraft_id} successfully updates purpose='Privé' and base_city='Joliette, CSG3', (4) POST /api/aircraft/{aircraft_id}/sync-tc-data returns correct response structure with ok, synced, message, fields_updated fields. All field types validated correctly. Authentication with test@aerologix.ca/password123 works properly. Aircraft model includes purpose and base_city fields as specified in review request."
+      - working: true
+        agent: "testing"
+        comment: "✅ DEFAULT VALUES TESTING COMPLETED - All review request scenarios passed with 100% success rate. Comprehensive testing confirmed: (1) Login with test@aerologix.ca/password123 works correctly, (2) GET /api/aircraft returns aircraft list where EACH aircraft has purpose and base_city fields that are NEVER null or missing, (3) When fields are null/empty in database, default value 'Non spécifié' is returned (French text as specified), (4) GET /api/aircraft/{aircraft_id} returns specific aircraft with purpose and base_city fields never null, (5) PUT /api/aircraft/{aircraft_id} with description update preserves purpose and base_city fields correctly, (6) Response structure matches expected format with id, registration, purpose, base_city fields. Default value mechanism working perfectly - apply_default_values() function ensures fields are always present with 'Non spécifié' when null in DB. All 7 individual tests passed."
 
   - task: "Critical Mentions Endpoint"
     implemented: true
