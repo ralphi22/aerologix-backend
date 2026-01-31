@@ -104,7 +104,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Collaborative AD/SB Detection System"
+    - "Aircraft Purpose and Base City Fields"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
