@@ -188,6 +188,8 @@ async def get_aircraft(
             detail="Aircraft not found"
         )
     
+    # Apply default values before returning
+    aircraft_doc = apply_default_values(aircraft_doc)
     return Aircraft(**aircraft_doc)
 
 @router.put("/{aircraft_id}", response_model=Aircraft)
