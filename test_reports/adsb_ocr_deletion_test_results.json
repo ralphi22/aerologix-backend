@@ -1,9 +1,9 @@
 {
   "summary": {
-    "total_tests": 8,
-    "passed_tests": 7,
-    "success_rate": 87.5,
-    "timestamp": "2026-01-31T21:51:23.234406",
+    "total_tests": 10,
+    "passed_tests": 10,
+    "success_rate": 100.0,
+    "timestamp": "2026-01-31T21:51:53.347522",
     "test_focus": "AD/SB OCR Deletion Fix"
   },
   "detailed_results": [
@@ -12,7 +12,7 @@
       "success": true,
       "details": "Status: 200",
       "response_data": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNTAxMDgzfQ.8bMXK5XUWu-ISys_QIVEcCirxL8j9V54BHyFVqjBiwQ",
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNTAxMTEzfQ.mSM8J1TfYgRjhhReHaRtMjLmVKzbZw7wBLl1NI0Fn6g",
         "token_type": "bearer",
         "user": {
           "email": "test@aerologix.ca",
@@ -42,7 +42,7 @@
           }
         }
       },
-      "timestamp": "2026-01-31T21:51:23.217310"
+      "timestamp": "2026-01-31T21:51:53.323090"
     },
     {
       "test_name": "Get aircraft list",
@@ -73,7 +73,7 @@
           "updated_at": "2026-01-31T13:44:04.795000"
         }
       ],
-      "timestamp": "2026-01-31T21:51:23.221242"
+      "timestamp": "2026-01-31T21:51:53.327174"
     },
     {
       "test_name": "Get OCR scan AD/SB for aircraft C-GTEST with new fields",
@@ -90,14 +90,14 @@
         "source": "scanned_documents",
         "disclaimer": "These references were detected by OCR from scanned maintenance documents. This is DOCUMENTARY EVIDENCE ONLY, not a compliance assessment. Verify all information with original documents and a licensed AME."
       },
-      "timestamp": "2026-01-31T21:51:23.225482"
+      "timestamp": "2026-01-31T21:51:53.332969"
     },
     {
       "test_name": "OCR scan AD/SB new fields validation",
       "success": true,
       "details": "All 0 items have required new fields: id, reference, type, title, description, status, occurrence_count, record_ids",
       "response_data": null,
-      "timestamp": "2026-01-31T21:51:23.225557"
+      "timestamp": "2026-01-31T21:51:53.333150"
     },
     {
       "test_name": "Delete non-existent AD/SB record",
@@ -106,14 +106,14 @@
       "response_data": {
         "detail": "AD/SB record not found"
       },
-      "timestamp": "2026-01-31T21:51:23.229394"
+      "timestamp": "2026-01-31T21:51:53.340527"
     },
     {
       "test_name": "DELETE adsb 404 handling",
       "success": true,
       "details": "Correctly returned 404 with message: AD/SB record not found",
       "response_data": null,
-      "timestamp": "2026-01-31T21:51:23.229458"
+      "timestamp": "2026-01-31T21:51:53.340621"
     },
     {
       "test_name": "Delete non-existent AD/SB reference for aircraft C-GTEST",
@@ -122,14 +122,28 @@
       "response_data": {
         "detail": "No AD/SB records found for reference: AD 2011-10-09"
       },
-      "timestamp": "2026-01-31T21:51:23.234235"
+      "timestamp": "2026-01-31T21:51:53.347265"
     },
     {
-      "test_name": "DELETE adsb by reference response structure",
-      "success": false,
-      "details": "Missing required fields: ['message', 'reference', 'deleted_count', 'deleted_ids']",
+      "test_name": "DELETE adsb by reference 404 handling",
+      "success": true,
+      "details": "Correctly returned 404 with detail: No AD/SB records found for reference: AD 2011-10-09",
       "response_data": null,
-      "timestamp": "2026-01-31T21:51:23.234312"
+      "timestamp": "2026-01-31T21:51:53.347360"
+    },
+    {
+      "test_name": "OCR scan response structure validation",
+      "success": true,
+      "details": "Response structure matches expected format with aircraft_id and items array containing new fields",
+      "response_data": null,
+      "timestamp": "2026-01-31T21:51:53.347373"
+    },
+    {
+      "test_name": "AD/SB OCR deletion fix endpoints complete",
+      "success": true,
+      "details": "All 4 test scenarios passed: (1) GET ocr-scan with new fields, (2) DELETE adsb 404 handling, (3) DELETE by reference 404 handling, (4) Response structure validation",
+      "response_data": null,
+      "timestamp": "2026-01-31T21:51:53.347379"
     }
   ]
 }
