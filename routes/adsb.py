@@ -1698,10 +1698,10 @@ async def get_ocr_scan_adsb(
                     "last_seen_date": date_str,
                     "scan_ids": [],
                     "record_ids": [],
-                    "title": None,
-                    "description": None,
-                    "status": None,
-                    "id": None
+                    "title": ref_title,
+                    "description": ref_title,  # Use title as description if available
+                    "status": ref_status,
+                    "id": scan_id  # Use first scan_id as the main ID for deletion
                 }
             
             # Increment count and update tracking
@@ -1709,13 +1709,19 @@ async def get_ocr_scan_adsb(
             agg["occurrence_count"] += 1
             agg["last_seen_date"] = date_str  # Update to most recent
             
+            # Update title/description if not set
+            if ref_title and not agg["title"]:
+                agg["title"] = ref_title
+                agg["description"] = ref_title
+            
             if scan_id not in agg["scan_ids"]:
                 agg["scan_ids"].append(scan_id)
+                # Use scan_ids as record_ids for deletion (from ocr_scans)
+                agg["record_ids"].append(scan_id)
     
     # ============================================================
     # ALSO CHECK adsb_records collection for applied OCR AD/SB
     # This contains the actual MongoDB _ids needed for deletion
-    # STRICT: Only include records with valid CF-YYYY-NN references
     # ============================================================
     adsb_cursor = db.adsb_records.find({
         "aircraft_id": aircraft_id,
