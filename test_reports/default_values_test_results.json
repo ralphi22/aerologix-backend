@@ -3,7 +3,7 @@
     "total_tests": 7,
     "passed_tests": 7,
     "success_rate": 100.0,
-    "timestamp": "2026-01-31T13:43:00.244860",
+    "timestamp": "2026-01-31T13:43:34.468617",
     "test_focus": "Default values for purpose and base_city fields"
   },
   "detailed_results": [
@@ -12,7 +12,7 @@
       "success": true,
       "details": "Status: 200",
       "response_data": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNDcxNzgwfQ.GW5jrWiJcohR4tKxnxPhDhUnwQChIrLoyltmPPjmq0A",
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNDcxODE0fQ.hdZ_2gilTM87vi0KuaDGhstzdSoNdXSP29yQG3MkpfA",
         "token_type": "bearer",
         "user": {
           "email": "test@aerologix.ca",
@@ -42,7 +42,7 @@
           }
         }
       },
-      "timestamp": "2026-01-31T13:43:00.229015"
+      "timestamp": "2026-01-31T13:43:34.460108"
     },
     {
       "test_name": "GET /api/aircraft - verify default values",
@@ -60,9 +60,9 @@
           "engine_hours": 1800.0,
           "propeller_hours": 1000.0,
           "photo_url": null,
-          "description": null,
-          "purpose": "Priv\u00e9",
-          "base_city": "Joliette, CSG3",
+          "description": "Test update",
+          "purpose": "Non sp\u00e9cifi\u00e9",
+          "base_city": "Non sp\u00e9cifi\u00e9",
           "adsb_has_new_tc_items": false,
           "count_new_adsb": 0,
           "last_tc_adsb_version": null,
@@ -70,17 +70,17 @@
           "_id": "1769733120179849",
           "user_id": "1769733078496887",
           "created_at": "2026-01-30T00:32:00.179000",
-          "updated_at": "2026-01-31T05:00:13.838000"
+          "updated_at": "2026-01-31T13:43:29.829000"
         }
       ],
-      "timestamp": "2026-01-31T13:43:00.237383"
+      "timestamp": "2026-01-31T13:43:34.462992"
     },
     {
       "test_name": "Aircraft C-GTEST - default values validation",
       "success": true,
-      "details": "\u2713 purpose='Priv\u00e9', base_city='Joliette, CSG3'",
+      "details": "\u2713 purpose='Non sp\u00e9cifi\u00e9', base_city='Non sp\u00e9cifi\u00e9'",
       "response_data": null,
-      "timestamp": "2026-01-31T13:43:00.237447"
+      "timestamp": "2026-01-31T13:43:34.463063"
     },
     {
       "test_name": "GET /api/aircraft/1769733120179849 - verify default values",
@@ -97,9 +97,9 @@
         "engine_hours": 1800.0,
         "propeller_hours": 1000.0,
         "photo_url": null,
-        "description": null,
-        "purpose": "Priv\u00e9",
-        "base_city": "Joliette, CSG3",
+        "description": "Test update",
+        "purpose": "Non sp\u00e9cifi\u00e9",
+        "base_city": "Non sp\u00e9cifi\u00e9",
         "adsb_has_new_tc_items": false,
         "count_new_adsb": 0,
         "last_tc_adsb_version": null,
@@ -107,16 +107,16 @@
         "_id": "1769733120179849",
         "user_id": "1769733078496887",
         "created_at": "2026-01-30T00:32:00.179000",
-        "updated_at": "2026-01-31T05:00:13.838000"
+        "updated_at": "2026-01-31T13:43:29.829000"
       },
-      "timestamp": "2026-01-31T13:43:00.241399"
+      "timestamp": "2026-01-31T13:43:34.465325"
     },
     {
       "test_name": "Specific aircraft - default values validation",
       "success": true,
-      "details": "\u2713 purpose='Priv\u00e9', base_city='Joliette, CSG3'",
+      "details": "\u2713 purpose='Non sp\u00e9cifi\u00e9', base_city='Non sp\u00e9cifi\u00e9'",
       "response_data": null,
-      "timestamp": "2026-01-31T13:43:00.241458"
+      "timestamp": "2026-01-31T13:43:34.465389"
     },
     {
       "test_name": "PUT /api/aircraft/1769733120179849 - verify defaults preserved",
@@ -134,8 +134,8 @@
         "propeller_hours": 1000.0,
         "photo_url": null,
         "description": "Test update",
-        "purpose": "Priv\u00e9",
-        "base_city": "Joliette, CSG3",
+        "purpose": "Non sp\u00e9cifi\u00e9",
+        "base_city": "Non sp\u00e9cifi\u00e9",
         "adsb_has_new_tc_items": false,
         "count_new_adsb": 0,
         "last_tc_adsb_version": null,
@@ -143,16 +143,16 @@
         "_id": "1769733120179849",
         "user_id": "1769733078496887",
         "created_at": "2026-01-30T00:32:00.179000",
-        "updated_at": "2026-01-31T13:43:00.243000"
+        "updated_at": "2026-01-31T13:43:34.467000"
       },
-      "timestamp": "2026-01-31T13:43:00.244703"
+      "timestamp": "2026-01-31T13:43:34.468440"
     },
     {
       "test_name": "Updated aircraft - default values preserved",
       "success": true,
-      "details": "\u2713 purpose='Priv\u00e9', base_city='Joliette, CSG3', description updated",
+      "details": "\u2713 purpose='Non sp\u00e9cifi\u00e9', base_city='Non sp\u00e9cifi\u00e9', description updated",
       "response_data": null,
-      "timestamp": "2026-01-31T13:43:00.244759"
+      "timestamp": "2026-01-31T13:43:34.468502"
     }
   ]
 }
