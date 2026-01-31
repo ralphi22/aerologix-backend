@@ -1712,9 +1712,12 @@ async def get_ocr_scan_adsb(
         if not raw_ref:
             continue
         
-        normalized = normalize_adsb_reference(raw_ref)
+        # STRICT VALIDATION: Only CF-YYYY-NN pattern accepted
+        normalized = normalize_to_cf_reference(raw_ref)
         
         if not normalized:
+            # Invalid reference format - skip it
+            logger.debug(f"[OCR-SCAN AD/SB] Skipping invalid adsb_record reference: {raw_ref}")
             continue
         
         # Initialize or update aggregation
