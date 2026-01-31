@@ -874,6 +874,102 @@ async def _delete_adsb_by_id(
     return {"message": "AD/SB record deleted successfully", "deleted_id": record_id}
 
 
+# ============================================================
+# DELETE BY REFERENCE (ALL OCCURRENCES)
+# ============================================================
+
+@router.delete("/ocr/{aircraft_id}/reference/{reference}")
+async def delete_adsb_by_reference(
+    aircraft_id: str,
+    reference: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_database)
+):
+    """
+    Delete ALL AD/SB records matching a reference for an aircraft.
+    
+    This endpoint is used by the frontend to delete all occurrences
+    of an AD/SB reference detected by OCR.
+    
+    URL encoded reference is automatically decoded by FastAPI.
+    Example: DELETE /api/adsb/ocr/123/reference/AD%202011-10-09
+    """
+    logger.info(f"DELETE BY REFERENCE | aircraft={aircraft_id} | reference={reference} | user={current_user.id}")
+    
+    # Verify aircraft belongs to user
+    aircraft = await db.aircrafts.find_one({
+        "_id": aircraft_id,
+        "user_id": current_user.id
+    })
+    
+    if not aircraft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aircraft not found"
+        )
+    
+    # Normalize reference for matching
+    ref_normalized = normalize_adsb_reference(reference)
+    
+    # Find all matching records
+    # Try multiple matching strategies
+    matching_records = []
+    
+    # Strategy 1: Exact match on reference_number
+    cursor = db.adsb_records.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "reference_number": reference
+    })
+    async for rec in cursor:
+        matching_records.append(rec)
+    
+    # Strategy 2: Normalized match (case insensitive)
+    if not matching_records:
+        cursor = db.adsb_records.find({
+            "aircraft_id": aircraft_id,
+            "user_id": current_user.id,
+            "reference_number": {"$regex": f"^{re.escape(reference)}$", "$options": "i"}
+        })
+        async for rec in cursor:
+            matching_records.append(rec)
+    
+    # Strategy 3: Match with normalized version
+    if not matching_records:
+        all_records = db.adsb_records.find({
+            "aircraft_id": aircraft_id,
+            "user_id": current_user.id
+        })
+        async for rec in all_records:
+            rec_normalized = normalize_adsb_reference(rec.get("reference_number", ""))
+            if rec_normalized == ref_normalized:
+                matching_records.append(rec)
+    
+    if not matching_records:
+        logger.warning(f"DELETE BY REF FAILED | reason=no_records_found | aircraft={aircraft_id} | ref={reference}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No AD/SB records found for reference: {reference}"
+        )
+    
+    # Delete all matching records
+    deleted_ids = []
+    for record in matching_records:
+        record_id = record["_id"]
+        result = await db.adsb_records.delete_one({"_id": record_id})
+        if result.deleted_count > 0:
+            deleted_ids.append(str(record_id))
+    
+    logger.info(f"DELETE BY REF CONFIRMED | aircraft={aircraft_id} | ref={reference} | deleted_count={len(deleted_ids)}")
+    
+    return {
+        "message": f"Deleted {len(deleted_ids)} AD/SB record(s) for reference: {reference}",
+        "reference": reference,
+        "deleted_count": len(deleted_ids),
+        "deleted_ids": deleted_ids
+    }
+
+
 @router.get("/{aircraft_id}/summary")
 async def get_adsb_summary(
     aircraft_id: str,
