@@ -119,7 +119,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Aircraft Purpose and Base City Fields"
+    - "AD/SB OCR Deletion Fix"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
