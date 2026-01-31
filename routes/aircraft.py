@@ -154,6 +154,8 @@ async def create_aircraft(
     await db.aircrafts.insert_one(aircraft_dict)
     logger.info(f"Aircraft {registration} created for user {current_user.email}")
     
+    # Apply default values before returning
+    aircraft_dict = apply_default_values(aircraft_dict)
     return Aircraft(**aircraft_dict)
 
 @router.get("", response_model=List[Aircraft])
@@ -164,7 +166,9 @@ async def get_user_aircraft(
     """Get all aircraft for the current user"""
     cursor = db.aircrafts.find({"user_id": current_user.id}).sort("created_at", -1)
     aircraft_list = await cursor.to_list(length=100)
-    return [Aircraft(**aircraft) for aircraft in aircraft_list]
+    
+    # Apply default values to each aircraft
+    return [Aircraft(**apply_default_values(aircraft)) for aircraft in aircraft_list]
 
 @router.get("/{aircraft_id}", response_model=Aircraft)
 async def get_aircraft(
