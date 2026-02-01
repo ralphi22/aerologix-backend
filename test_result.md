@@ -150,6 +150,18 @@ metadata:
         agent: "main"
         comment: "NEW FEATURE: Added frequency/recurrence tracking to OCR AD/SB endpoint. Each item now includes recurrence_type, recurrence_value, recurrence_display (human-readable in French), next_due_date, days_until_due, is_recurring flag. Cross-references with TC baseline to enrich OCR-detected items with official recurrence data. Response now includes total_recurring count."
 
+  - task: "TC AD/SB Scan Comparison (Vu/Non Vu Badges)"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/tc_import.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TC AD/SB Scan Comparison (Vu/Non Vu Badges) fully tested and working. All 3 test scenarios from review request passed: (1) GET /api/adsb/tc/references/{aircraft_id} returns correct response structure including new comparison fields (total_seen, total_not_seen), (2) Field type validation passed - total_seen/total_not_seen are integers, seen_in_scans is boolean, scan_count is integer, last_scan_date is string or null, (3) Consistency verification passed - total_seen + total_not_seen == total_count. Authentication with test@aerologix.ca/password123 works properly. Each TC imported reference now includes scan comparison data: seen_in_scans (boolean for Vu/Non Vu badge), scan_count (number of OCR detections), last_scan_date (most recent scan date). Response includes summary counts for badge display. Error handling for invalid aircraft_id returns proper 404."
+
 test_plan:
   current_focus: []
   stuck_tasks: []
