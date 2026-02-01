@@ -2140,8 +2140,8 @@ async def get_ocr_scan_adsb(
     # Logging
     logger.info(
         f"[OCR-SCAN AD/SB] aircraft={aircraft_id} | "
-        f"unique_refs={len(items)} (AD={total_ad}, SB={total_sb}) | "
-        f"documents={documents_analyzed}"
+        f"unique_refs={len(items)} (AD={total_ad}, SB={total_sb}, recurring={total_recurring}) | "
+        f"documents={documents_analyzed} | tc_matched={sum(1 for i in items if i.tc_matched)}"
     )
     
     # Debug: Top occurrences
@@ -2157,6 +2157,7 @@ async def get_ocr_scan_adsb(
         total_unique_references=len(items),
         total_ad=total_ad,
         total_sb=total_sb,
+        total_recurring=total_recurring,
         documents_analyzed=documents_analyzed,
         source="scanned_documents"
     )
