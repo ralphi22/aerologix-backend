@@ -2505,8 +2505,8 @@ class AeroLogixBackendTester:
         return self.tests_passed == self.tests_run
 
 def main():
-    """Main test runner for AD/SB OCR Frequency Tracking"""
-    print("🚀 AeroLogix Backend Testing - AD/SB OCR Frequency Tracking")
+    """Main test runner for TC PDF Import - Title Display Fix"""
+    print("🚀 AeroLogix Backend Testing - TC PDF Import - Title Display Fix")
     print("=" * 60)
     
     tester = AeroLogixBackendTester()
@@ -2516,11 +2516,11 @@ def main():
         print("❌ Authentication failed. Cannot proceed with tests.")
         return 1
     
-    print("✅ Authentication successful. Proceeding with AD/SB OCR frequency tracking tests...")
+    print("✅ Authentication successful. Proceeding with TC PDF Import tests...")
     print()
     
-    # Run the specific AD/SB OCR frequency tracking test
-    success = tester.test_adsb_ocr_frequency_tracking()
+    # Run the specific TC PDF Import - Title Display Fix test
+    success = tester.test_tc_pdf_import_title_display_fix()
     
     # Print summary
     print("=" * 60)
@@ -2531,20 +2531,20 @@ def main():
     print(f"Success Rate: {(tester.tests_passed/tester.tests_run*100):.1f}%" if tester.tests_run > 0 else "0%")
     
     if success:
-        print("✅ AD/SB OCR frequency tracking endpoints are working correctly!")
+        print("✅ TC PDF Import - Title Display Fix endpoints are working correctly!")
     else:
-        print("❌ AD/SB OCR frequency tracking endpoints have issues!")
+        print("❌ TC PDF Import - Title Display Fix endpoints have issues!")
     
     # Save detailed test results
     try:
-        with open('/app/test_reports/adsb_ocr_frequency_test_results.json', 'w') as f:
+        with open('/app/test_reports/tc_pdf_import_test_results.json', 'w') as f:
             json.dump({
                 'summary': {
                     'total_tests': tester.tests_run,
                     'passed_tests': tester.tests_passed,
                     'success_rate': (tester.tests_passed/tester.tests_run)*100 if tester.tests_run > 0 else 0,
                     'timestamp': datetime.now().isoformat(),
-                    'test_focus': 'AD/SB OCR Frequency Tracking'
+                    'test_focus': 'TC PDF Import - Title Display Fix'
                 },
                 'detailed_results': tester.test_results
             }, f, indent=2)
