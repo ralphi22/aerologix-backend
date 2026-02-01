@@ -1665,6 +1665,203 @@ class AeroLogixBackendTester:
         
         return success1 and success2 and success3 and success4
 
+    def test_tc_adsb_scan_comparison(self):
+        """Test TC AD/SB Scan Comparison (Vu/Non Vu Badges) as per review request"""
+        print("🔍 Testing TC AD/SB Scan Comparison (Vu/Non Vu Badges)...")
+        
+        # Get aircraft ID first
+        aircraft_id, registration = self.get_aircraft_list()
+        
+        if not aircraft_id:
+            self.log_test("TC AD/SB Scan Comparison test setup", False, "No aircraft available for testing")
+            return False
+        
+        # Test 1: Verify response includes comparison fields
+        print("📋 Test 1: Verify response includes comparison fields")
+        success1, response1 = self.run_test(
+            f"Get TC references with scan comparison for aircraft {registration}",
+            "GET",
+            f"api/adsb/tc/references/{aircraft_id}",
+            200
+        )
+        
+        if not success1:
+            return False
+        
+        # Validate response structure includes new comparison fields
+        required_fields = ["aircraft_id", "total_count", "total_seen", "total_not_seen", "references"]
+        missing_fields = [field for field in required_fields if field not in response1]
+        
+        if missing_fields:
+            self.log_test(
+                "TC scan comparison response structure",
+                False,
+                f"Missing required fields: {missing_fields}"
+            )
+            return False
+        
+        # Validate aircraft_id matches
+        if response1.get("aircraft_id") != aircraft_id:
+            self.log_test(
+                "TC scan comparison aircraft_id validation",
+                False,
+                f"Expected aircraft_id={aircraft_id}, got {response1.get('aircraft_id')}"
+            )
+            return False
+        
+        # Validate references is an array
+        references = response1.get("references", [])
+        if not isinstance(references, list):
+            self.log_test(
+                "TC scan comparison references format",
+                False,
+                f"References should be an array, got {type(references)}"
+            )
+            return False
+        
+        # Test 2: Verify field types
+        print("📋 Test 2: Verify field types")
+        
+        # Validate response-level field types
+        total_seen = response1.get("total_seen")
+        total_not_seen = response1.get("total_not_seen")
+        total_count = response1.get("total_count")
+        
+        if not isinstance(total_seen, int):
+            self.log_test(
+                "TC scan comparison total_seen type",
+                False,
+                f"total_seen should be integer, got {type(total_seen)}"
+            )
+            return False
+        
+        if not isinstance(total_not_seen, int):
+            self.log_test(
+                "TC scan comparison total_not_seen type",
+                False,
+                f"total_not_seen should be integer, got {type(total_not_seen)}"
+            )
+            return False
+        
+        if not isinstance(total_count, int):
+            self.log_test(
+                "TC scan comparison total_count type",
+                False,
+                f"total_count should be integer, got {type(total_count)}"
+            )
+            return False
+        
+        # Validate each reference structure (if any references exist)
+        for i, reference in enumerate(references):
+            required_ref_fields = [
+                "tc_reference_id", "identifier", "seen_in_scans", 
+                "scan_count", "last_scan_date"
+            ]
+            missing_ref_fields = [field for field in required_ref_fields if field not in reference]
+            
+            if missing_ref_fields:
+                self.log_test(
+                    f"TC scan comparison reference {i} structure",
+                    False,
+                    f"Missing reference fields: {missing_ref_fields}"
+                )
+                return False
+            
+            # Validate field types for each reference
+            seen_in_scans = reference.get("seen_in_scans")
+            scan_count = reference.get("scan_count")
+            last_scan_date = reference.get("last_scan_date")
+            
+            if not isinstance(seen_in_scans, bool):
+                self.log_test(
+                    f"TC scan comparison reference {i} seen_in_scans type",
+                    False,
+                    f"seen_in_scans should be boolean, got {type(seen_in_scans)}"
+                )
+                return False
+            
+            if not isinstance(scan_count, int):
+                self.log_test(
+                    f"TC scan comparison reference {i} scan_count type",
+                    False,
+                    f"scan_count should be integer, got {type(scan_count)}"
+                )
+                return False
+            
+            # last_scan_date should be string or null
+            if last_scan_date is not None and not isinstance(last_scan_date, str):
+                self.log_test(
+                    f"TC scan comparison reference {i} last_scan_date type",
+                    False,
+                    f"last_scan_date should be string or null, got {type(last_scan_date)}"
+                )
+                return False
+        
+        # Test 3: Verify consistency
+        print("📋 Test 3: Verify consistency")
+        
+        if total_seen + total_not_seen != total_count:
+            self.log_test(
+                "TC scan comparison count consistency",
+                False,
+                f"total_seen({total_seen}) + total_not_seen({total_not_seen}) != total_count({total_count})"
+            )
+            return False
+        
+        # Verify that total_count matches references array length
+        if total_count != len(references):
+            self.log_test(
+                "TC scan comparison total_count vs references length",
+                False,
+                f"total_count({total_count}) != references length({len(references)})"
+            )
+            return False
+        
+        # Count actual seen/not_seen in references array
+        actual_seen = sum(1 for ref in references if ref.get("seen_in_scans"))
+        actual_not_seen = sum(1 for ref in references if not ref.get("seen_in_scans"))
+        
+        if actual_seen != total_seen:
+            self.log_test(
+                "TC scan comparison actual vs reported seen count",
+                False,
+                f"Actual seen({actual_seen}) != total_seen({total_seen})"
+            )
+            return False
+        
+        if actual_not_seen != total_not_seen:
+            self.log_test(
+                "TC scan comparison actual vs reported not_seen count",
+                False,
+                f"Actual not_seen({actual_not_seen}) != total_not_seen({total_not_seen})"
+            )
+            return False
+        
+        # Log successful validation
+        self.log_test(
+            "TC AD/SB Scan Comparison validation complete",
+            True,
+            f"All validations passed. Total: {total_count}, Seen: {total_seen}, Not seen: {total_not_seen}, References with comparison data: {len(references)}"
+        )
+        
+        # Test with invalid aircraft ID
+        success_invalid, response_invalid = self.run_test(
+            "Get TC scan comparison for invalid aircraft",
+            "GET",
+            "api/adsb/tc/references/invalid_aircraft_id",
+            404
+        )
+        
+        if not success_invalid:
+            self.log_test(
+                "TC scan comparison invalid aircraft test",
+                False,
+                "Expected 404 for invalid aircraft_id"
+            )
+            return False
+        
+        return success1 and success_invalid
+
     def test_tc_pdf_import_title_display_fix(self):
         """Test TC PDF Import - Title Display Fix as per review request"""
         print("📄 Testing TC PDF Import - Title Display Fix...")
