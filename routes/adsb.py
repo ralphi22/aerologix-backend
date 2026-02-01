@@ -886,15 +886,18 @@ async def delete_adsb_by_reference(
     db=Depends(get_database)
 ):
     """
-    Delete ALL AD/SB records matching a reference for an aircraft.
+    Delete ALL occurrences of an AD/SB reference from OCR scanned documents.
     
-    This endpoint is used by the frontend to delete all occurrences
-    of an AD/SB reference detected by OCR.
+    This endpoint removes ad_sb_references from the embedded array in ocr_scans
+    documents. It uses MongoDB's $pull operator to atomically remove matching
+    elements from the extracted_data.ad_sb_references array.
     
     URL encoded reference is automatically decoded by FastAPI.
-    Example: DELETE /api/adsb/ocr/123/reference/AD%202011-10-09
+    Example: DELETE /api/adsb/ocr/123/reference/CF-2024-01
+    
+    IMPORTANT: This targets the ocr_scans collection, NOT adsb_records.
     """
-    logger.info(f"DELETE BY REFERENCE | aircraft={aircraft_id} | reference={reference} | user={current_user.id}")
+    logger.info(f"DELETE OCR AD/SB BY REFERENCE | aircraft={aircraft_id} | reference={reference} | user={current_user.id}")
     
     # Verify aircraft belongs to user
     aircraft = await db.aircrafts.find_one({
@@ -910,63 +913,127 @@ async def delete_adsb_by_reference(
     
     # Normalize reference for matching
     ref_normalized = normalize_adsb_reference(reference)
+    ref_upper = reference.strip().upper()
     
-    # Find all matching records
-    # Try multiple matching strategies
-    matching_records = []
+    # Build multiple patterns for matching (to handle variations in OCR data)
+    # The reference might be stored as "CF-2024-01", "CF 2024 01", "CF.2024.01", etc.
     
-    # Strategy 1: Exact match on reference_number
-    cursor = db.adsb_records.find({
-        "aircraft_id": aircraft_id,
-        "user_id": current_user.id,
-        "reference_number": reference
-    })
-    async for rec in cursor:
-        matching_records.append(rec)
+    total_modified = 0
+    total_removed = 0
     
-    # Strategy 2: Normalized match (case insensitive)
-    if not matching_records:
-        cursor = db.adsb_records.find({
+    # ============================================================
+    # STRATEGY 1: Pull by exact reference_number match
+    # ============================================================
+    result1 = await db.ocr_scans.update_many(
+        {
             "aircraft_id": aircraft_id,
             "user_id": current_user.id,
-            "reference_number": {"$regex": f"^{re.escape(reference)}$", "$options": "i"}
-        })
-        async for rec in cursor:
-            matching_records.append(rec)
+            "status": "APPLIED"
+        },
+        {
+            "$pull": {
+                "extracted_data.ad_sb_references": {
+                    "reference_number": reference
+                }
+            }
+        }
+    )
+    total_modified += result1.modified_count
     
-    # Strategy 3: Match with normalized version
-    if not matching_records:
-        all_records = db.adsb_records.find({
+    # ============================================================
+    # STRATEGY 2: Pull by case-insensitive reference_number
+    # ============================================================
+    result2 = await db.ocr_scans.update_many(
+        {
             "aircraft_id": aircraft_id,
-            "user_id": current_user.id
-        })
-        async for rec in all_records:
-            rec_normalized = normalize_adsb_reference(rec.get("reference_number", ""))
-            if rec_normalized == ref_normalized:
-                matching_records.append(rec)
+            "user_id": current_user.id,
+            "status": "APPLIED"
+        },
+        {
+            "$pull": {
+                "extracted_data.ad_sb_references": {
+                    "reference_number": {"$regex": f"^{re.escape(reference)}$", "$options": "i"}
+                }
+            }
+        }
+    )
+    total_modified += result2.modified_count
     
-    if not matching_records:
-        logger.warning(f"DELETE BY REF FAILED | reason=no_records_found | aircraft={aircraft_id} | ref={reference}")
+    # ============================================================
+    # STRATEGY 3: Pull by normalized reference (handle variations)
+    # Some OCR data might have spaces, dots, or different separators
+    # ============================================================
+    # Pattern to match variations: CF-2024-01, CF 2024 01, CF.2024.01
+    ref_pattern_parts = re.split(r'[-.\s]+', reference.strip())
+    if len(ref_pattern_parts) >= 2:
+        # Build a flexible regex pattern
+        flexible_pattern = r'[\s.\-]*'.join([re.escape(p) for p in ref_pattern_parts])
+        
+        result3 = await db.ocr_scans.update_many(
+            {
+                "aircraft_id": aircraft_id,
+                "user_id": current_user.id,
+                "status": "APPLIED"
+            },
+            {
+                "$pull": {
+                    "extracted_data.ad_sb_references": {
+                        "reference_number": {"$regex": f"^{flexible_pattern}$", "$options": "i"}
+                    }
+                }
+            }
+        )
+        total_modified += result3.modified_count
+    
+    # ============================================================
+    # STRATEGY 4: Also check 'identifier' field (alternative field name)
+    # ============================================================
+    result4 = await db.ocr_scans.update_many(
+        {
+            "aircraft_id": aircraft_id,
+            "user_id": current_user.id,
+            "status": "APPLIED"
+        },
+        {
+            "$pull": {
+                "extracted_data.ad_sb_references": {
+                    "identifier": {"$regex": f"^{re.escape(reference)}$", "$options": "i"}
+                }
+            }
+        }
+    )
+    total_modified += result4.modified_count
+    
+    # ============================================================
+    # ALSO: Delete from adsb_records collection (for legacy data)
+    # ============================================================
+    adsb_delete_result = await db.adsb_records.delete_many({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "reference_number": {"$regex": f"^{re.escape(reference)}$", "$options": "i"}
+    })
+    deleted_from_adsb_records = adsb_delete_result.deleted_count
+    
+    # Log results
+    logger.info(
+        f"DELETE OCR AD/SB CONFIRMED | aircraft={aircraft_id} | ref={reference} | "
+        f"ocr_scans_modified={total_modified} | adsb_records_deleted={deleted_from_adsb_records}"
+    )
+    
+    # Check if anything was deleted
+    if total_modified == 0 and deleted_from_adsb_records == 0:
+        logger.warning(f"DELETE OCR AD/SB | No documents modified | aircraft={aircraft_id} | ref={reference}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No AD/SB records found for reference: {reference}"
+            detail=f"No AD/SB references found for: {reference}"
         )
     
-    # Delete all matching records
-    deleted_ids = []
-    for record in matching_records:
-        record_id = record["_id"]
-        result = await db.adsb_records.delete_one({"_id": record_id})
-        if result.deleted_count > 0:
-            deleted_ids.append(str(record_id))
-    
-    logger.info(f"DELETE BY REF CONFIRMED | aircraft={aircraft_id} | ref={reference} | deleted_count={len(deleted_ids)}")
-    
     return {
-        "message": f"Deleted {len(deleted_ids)} AD/SB record(s) for reference: {reference}",
+        "message": f"Successfully deleted AD/SB reference: {reference}",
         "reference": reference,
-        "deleted_count": len(deleted_ids),
-        "deleted_ids": deleted_ids
+        "ocr_documents_modified": total_modified,
+        "adsb_records_deleted": deleted_from_adsb_records,
+        "success": True
     }
 
 
