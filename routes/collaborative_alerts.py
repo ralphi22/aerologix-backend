@@ -8,6 +8,7 @@ ENDPOINTS:
 - PUT /api/alerts/adsb/{alert_id}/read - Mark alert as read
 - PUT /api/alerts/adsb/{alert_id}/dismiss - Dismiss alert
 - GET /api/alerts/adsb/count - Get unread alert count
+- GET /api/alerts - ALIAS for frontend compatibility
 
 TC-SAFE: Informational alerts only, no compliance decisions.
 """
@@ -25,7 +26,7 @@ from models.user import User
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/alerts/adsb", tags=["alerts-adsb"])
+router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
 
 # ============================================================
