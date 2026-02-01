@@ -3118,8 +3118,8 @@ class AeroLogixBackendTester:
         return self.tests_passed == self.tests_run
 
 def main():
-    """Main test runner for TC PDF Import - Title Display Fix"""
-    print("🚀 AeroLogix Backend Testing - TC PDF Import - Title Display Fix")
+    """Main test runner for Critical Mentions Deduplication"""
+    print("🚀 AeroLogix Backend Testing - Critical Mentions Deduplication")
     print("=" * 60)
     
     tester = AeroLogixBackendTester()
@@ -3129,11 +3129,11 @@ def main():
         print("❌ Authentication failed. Cannot proceed with tests.")
         return 1
     
-    print("✅ Authentication successful. Proceeding with TC PDF Import tests...")
+    print("✅ Authentication successful. Proceeding with Critical Mentions Deduplication tests...")
     print()
     
-    # Run the specific TC PDF Import - Title Display Fix test
-    success = tester.test_tc_pdf_import_title_display_fix()
+    # Run the specific Critical Mentions Deduplication test
+    success = tester.test_critical_mentions_deduplication()
     
     # Print summary
     print("=" * 60)
@@ -3144,20 +3144,20 @@ def main():
     print(f"Success Rate: {(tester.tests_passed/tester.tests_run*100):.1f}%" if tester.tests_run > 0 else "0%")
     
     if success:
-        print("✅ TC PDF Import - Title Display Fix endpoints are working correctly!")
+        print("✅ Critical Mentions Deduplication endpoints are working correctly!")
     else:
-        print("❌ TC PDF Import - Title Display Fix endpoints have issues!")
+        print("❌ Critical Mentions Deduplication endpoints have issues!")
     
     # Save detailed test results
     try:
-        with open('/app/test_reports/tc_pdf_import_test_results.json', 'w') as f:
+        with open('/app/test_reports/critical_mentions_deduplication_test_results.json', 'w') as f:
             json.dump({
                 'summary': {
                     'total_tests': tester.tests_run,
                     'passed_tests': tester.tests_passed,
                     'success_rate': (tester.tests_passed/tester.tests_run)*100 if tester.tests_run > 0 else 0,
                     'timestamp': datetime.now().isoformat(),
-                    'test_focus': 'TC PDF Import - Title Display Fix'
+                    'test_focus': 'Critical Mentions Deduplication'
                 },
                 'detailed_results': tester.test_results
             }, f, indent=2)
