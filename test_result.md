@@ -120,6 +120,18 @@ metadata:
   test_sequence: 1
   run_ui: false
 
+  - task: "TC PDF Import - Title Display Fix"
+    implemented: true
+    working: false
+    file: "/app/backend/routes/tc_import.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "main"
+        comment: "FIX: Added title and filename fields to ImportedReferenceItem model. Service now extracts title from PDF Subject line during import. GET /api/adsb/tc/references/{aircraft_id} now returns title and filename for display in frontend."
+
   - task: "AD/SB OCR Frequency Tracking"
     implemented: true
     working: true
