@@ -911,15 +911,10 @@ async def delete_adsb_by_reference(
             detail="Aircraft not found"
         )
     
-    # Normalize reference for matching
-    ref_normalized = normalize_adsb_reference(reference)
-    ref_upper = reference.strip().upper()
-    
     # Build multiple patterns for matching (to handle variations in OCR data)
     # The reference might be stored as "CF-2024-01", "CF 2024 01", "CF.2024.01", etc.
     
     total_modified = 0
-    total_removed = 0
     
     # ============================================================
     # STRATEGY 1: Pull by exact reference_number match
