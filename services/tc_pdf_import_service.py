@@ -298,12 +298,13 @@ class TCPDFImportService:
                 logger.debug(f"[TC PDF IMPORT] Skip duplicate: {identifier} for aircraft={aircraft_id}")
                 continue
             
-            # Create document
+            # Create document with title
             ref_doc = {
                 "aircraft_id": aircraft_id,
                 "identifier": identifier,
                 "type": "AD",
                 "tc_pdf_id": tc_pdf_id,
+                "title": title,  # Include title from PDF
                 "source": "TC_PDF_IMPORT",
                 "created_by": user_id,
                 "created_at": now
@@ -312,7 +313,7 @@ class TCPDFImportService:
             try:
                 result = await self.db.tc_imported_references.insert_one(ref_doc)
                 created_count += 1
-                logger.debug(f"[TC PDF IMPORT] Created reference: _id={result.inserted_id} identifier={identifier}")
+                logger.debug(f"[TC PDF IMPORT] Created reference: _id={result.inserted_id} identifier={identifier} title={title}")
             except Exception as e:
                 logger.warning(f"[TC PDF IMPORT] Failed to create {identifier}: {e}")
         
