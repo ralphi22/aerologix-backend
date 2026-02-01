@@ -2300,8 +2300,8 @@ class AeroLogixBackendTester:
         return self.tests_passed == self.tests_run
 
 def main():
-    """Main test runner for AD/SB OCR deletion fix"""
-    print("🚀 AeroLogix Backend Testing - AD/SB OCR Deletion Fix")
+    """Main test runner for AD/SB OCR Frequency Tracking"""
+    print("🚀 AeroLogix Backend Testing - AD/SB OCR Frequency Tracking")
     print("=" * 60)
     
     tester = AeroLogixBackendTester()
@@ -2311,11 +2311,11 @@ def main():
         print("❌ Authentication failed. Cannot proceed with tests.")
         return 1
     
-    print("✅ Authentication successful. Proceeding with AD/SB OCR deletion tests...")
+    print("✅ Authentication successful. Proceeding with AD/SB OCR frequency tracking tests...")
     print()
     
-    # Run the specific AD/SB OCR deletion fix test
-    success = tester.test_adsb_ocr_deletion_fix_v2()
+    # Run the specific AD/SB OCR frequency tracking test
+    success = tester.test_adsb_ocr_frequency_tracking()
     
     # Print summary
     print("=" * 60)
@@ -2326,20 +2326,20 @@ def main():
     print(f"Success Rate: {(tester.tests_passed/tester.tests_run*100):.1f}%" if tester.tests_run > 0 else "0%")
     
     if success:
-        print("✅ AD/SB OCR deletion fix endpoints are working correctly!")
+        print("✅ AD/SB OCR frequency tracking endpoints are working correctly!")
     else:
-        print("❌ AD/SB OCR deletion fix endpoints have issues!")
+        print("❌ AD/SB OCR frequency tracking endpoints have issues!")
     
     # Save detailed test results
     try:
-        with open('/app/test_reports/adsb_ocr_deletion_test_results.json', 'w') as f:
+        with open('/app/test_reports/adsb_ocr_frequency_test_results.json', 'w') as f:
             json.dump({
                 'summary': {
                     'total_tests': tester.tests_run,
                     'passed_tests': tester.tests_passed,
                     'success_rate': (tester.tests_passed/tester.tests_run)*100 if tester.tests_run > 0 else 0,
                     'timestamp': datetime.now().isoformat(),
-                    'test_focus': 'AD/SB OCR Deletion Fix'
+                    'test_focus': 'AD/SB OCR Frequency Tracking'
                 },
                 'detailed_results': tester.test_results
             }, f, indent=2)
