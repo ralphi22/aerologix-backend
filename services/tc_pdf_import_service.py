@@ -95,6 +95,42 @@ class TCPDFImportService:
             logger.error(f"[TC PDF IMPORT] PDF extraction failed: {e}")
             raise ValueError(f"Failed to extract text from PDF: {e}")
     
+    def extract_title_from_text(self, text: str) -> Optional[str]:
+        """
+        Extract title/subject from TC PDF text.
+        
+        TC PDFs typically have a "Subject:" line with the AD description.
+        Example: "Subject: Cessna 150/152 — Rudder Stop"
+        
+        Returns:
+            Title string or None if not found
+        """
+        if not text:
+            return None
+        
+        # Pattern 1: Subject: line (TC format)
+        subject_match = re.search(r'Subject:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
+        if subject_match:
+            title = subject_match.group(1).strip()
+            if title:
+                return title
+        
+        # Pattern 2: Look for "AIRWORTHINESS DIRECTIVE" followed by a title line
+        ad_match = re.search(r'AIRWORTHINESS\s+DIRECTIVE[^\n]*\n+(?:.*?\n)*?Subject:\s*([^\n]+)', text, re.IGNORECASE)
+        if ad_match:
+            title = ad_match.group(1).strip()
+            if title:
+                return title
+        
+        # Pattern 3: Look for Number and Subject pattern
+        num_subject = re.search(r'Number:\s*CF-[\d-]+\s*\n\s*Subject:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
+        if num_subject:
+            title = num_subject.group(1).strip()
+            if title:
+                return title
+        
+        return None
+    
     # --------------------------------------------------------
     # REFERENCE EXTRACTION - STRICT CF-XXXX-XX ONLY
     # --------------------------------------------------------
