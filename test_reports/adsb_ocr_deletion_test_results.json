@@ -3,7 +3,7 @@
     "total_tests": 10,
     "passed_tests": 10,
     "success_rate": 100.0,
-    "timestamp": "2026-02-01T00:10:44.006895",
+    "timestamp": "2026-02-01T00:31:40.685914",
     "test_focus": "AD/SB OCR Deletion Fix"
   },
   "detailed_results": [
@@ -12,7 +12,7 @@
       "success": true,
       "details": "Status: 200",
       "response_data": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNTA5NDQzfQ.pPkVE_XFoj_M8pqBYCTd9fgTS_mYGbQzuspmcif-kNQ",
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNTEwNzAwfQ.3v-vBwR8HVTHaKAGRrrYe_NHjIQBhKhby0raCz-1GtM",
         "token_type": "bearer",
         "user": {
           "email": "test@aerologix.ca",
@@ -42,7 +42,7 @@
           }
         }
       },
-      "timestamp": "2026-02-01T00:10:43.978996"
+      "timestamp": "2026-02-01T00:31:40.665038"
     },
     {
       "test_name": "Get aircraft list",
@@ -73,7 +73,7 @@
           "updated_at": "2026-01-31T13:44:04.795000"
         }
       ],
-      "timestamp": "2026-02-01T00:10:43.986134"
+      "timestamp": "2026-02-01T00:31:40.670333"
     },
     {
       "test_name": "Delete OCR AD/SB reference CF-9999-99 (non-existent)",
@@ -82,21 +82,21 @@
       "response_data": {
         "detail": "No AD/SB references found for: CF-9999-99"
       },
-      "timestamp": "2026-02-01T00:10:43.993266"
+      "timestamp": "2026-02-01T00:31:40.675718"
     },
     {
       "test_name": "DELETE OCR AD/SB reference endpoint validation",
       "success": true,
       "details": "Correct 404 response: No AD/SB references found for: CF-9999-99",
       "response_data": null,
-      "timestamp": "2026-02-01T00:10:43.993370"
+      "timestamp": "2026-02-01T00:31:40.675808"
     },
     {
       "test_name": "DELETE OCR AD/SB success response structure validation",
       "success": true,
       "details": "Expected success response fields validated: ['message', 'reference', 'ocr_documents_modified', 'adsb_records_deleted', 'success']",
       "response_data": null,
-      "timestamp": "2026-02-01T00:10:43.993387"
+      "timestamp": "2026-02-01T00:31:40.675826"
     },
     {
       "test_name": "Get OCR scan AD/SB for aircraft C-GTEST",
@@ -109,18 +109,19 @@
         "total_unique_references": 0,
         "total_ad": 0,
         "total_sb": 0,
+        "total_recurring": 0,
         "documents_analyzed": 0,
         "source": "scanned_documents",
         "disclaimer": "These references were detected by OCR from scanned maintenance documents. This is DOCUMENTARY EVIDENCE ONLY, not a compliance assessment. Verify all information with original documents and a licensed AME."
       },
-      "timestamp": "2026-02-01T00:10:43.997810"
+      "timestamp": "2026-02-01T00:31:40.680734"
     },
     {
       "test_name": "GET OCR scan AD/SB endpoint validation",
       "success": true,
       "details": "All validations passed. Items: 0, Source: scanned_documents",
       "response_data": null,
-      "timestamp": "2026-02-01T00:10:43.997895"
+      "timestamp": "2026-02-01T00:31:40.680832"
     },
     {
       "test_name": "Delete OCR AD/SB reference CF-2024-01 (URL format test)",
@@ -129,21 +130,21 @@
       "response_data": {
         "detail": "No AD/SB references found for: CF-2024-01"
       },
-      "timestamp": "2026-02-01T00:10:44.006673"
+      "timestamp": "2026-02-01T00:31:40.685675"
     },
     {
       "test_name": "DELETE OCR AD/SB URL format validation",
       "success": true,
       "details": "URL format correctly handled: No AD/SB references found for: CF-2024-01",
       "response_data": null,
-      "timestamp": "2026-02-01T00:10:44.006769"
+      "timestamp": "2026-02-01T00:31:40.685764"
     },
     {
       "test_name": "AD/SB OCR Deletion Fix V2 complete validation",
       "success": true,
       "details": "All test scenarios passed: (1) DELETE endpoint structure verified, (2) Expected response format validated, (3) GET endpoint still works correctly, (4) URL format handling confirmed",
       "response_data": null,
-      "timestamp": "2026-02-01T00:10:44.006777"
+      "timestamp": "2026-02-01T00:31:40.685772"
     }
   ]
 }
