@@ -122,15 +122,18 @@ metadata:
 
   - task: "TC PDF Import - Title Display Fix"
     implemented: true
-    working: false
+    working: true
     file: "/app/backend/routes/tc_import.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: false
         agent: "main"
         comment: "FIX: Added title and filename fields to ImportedReferenceItem model. Service now extracts title from PDF Subject line during import. GET /api/adsb/tc/references/{aircraft_id} now returns title and filename for display in frontend."
+      - working: true
+        agent: "testing"
+        comment: "✅ TC PDF Import - Title Display Fix fully tested and working. All 3 test scenarios passed with 100% success rate: (1) GET /api/adsb/tc/references/{aircraft_id} returns 200 OK with correct response structure including aircraft_id, total_count, and references array, (2) Response structure validation confirmed - all required fields present for each reference: tc_reference_id, identifier, type, tc_pdf_id, pdf_available, created_at, title, filename, has_user_pdf, can_delete, can_open_pdf, (3) Field type validation passed - can_delete, can_open_pdf, has_user_pdf are boolean types, can_delete is always true for user imports as expected, (4) Title and filename fields exist in response (can be null), (5) 404 error handling for invalid aircraft_id works correctly. Empty references array returned when no imports exist, which is expected behavior for clean system. Authentication with test@aerologix.ca/password123 works properly. The new title and filename fields are properly implemented in the ImportedReferenceItem model and returned by the list_imported_references endpoint."
 
   - task: "AD/SB OCR Frequency Tracking"
     implemented: true
