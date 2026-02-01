@@ -1370,6 +1370,259 @@ class AeroLogixBackendTester:
         
         return success1 and success2 and success3 and alert_management_success and success6
 
+    def test_collaborative_alerts_new_endpoints(self):
+        """Test Collaborative AD/SB Alert System - New Endpoints as per review request"""
+        print("🚨 Testing Collaborative AD/SB Alert System - New Endpoints...")
+        
+        # Test 1: GET /api/alerts - Get alerts list (new endpoint structure)
+        print("📋 Test 1: GET /api/alerts returns correct structure")
+        success1, response1 = self.run_test(
+            "Get alerts list (new endpoint)",
+            "GET",
+            "api/alerts",
+            200
+        )
+        
+        if not success1:
+            return False
+        
+        # Validate response structure matches expected format from review request
+        required_fields = ["alerts", "total_count", "unread_count"]
+        missing_fields = [field for field in required_fields if field not in response1]
+        
+        if missing_fields:
+            self.log_test(
+                "GET /api/alerts response structure",
+                False,
+                f"Missing required fields: {missing_fields}"
+            )
+            return False
+        
+        # Validate alerts is an array
+        alerts = response1.get("alerts", [])
+        if not isinstance(alerts, list):
+            self.log_test(
+                "GET /api/alerts alerts format",
+                False,
+                f"Alerts should be an array, got {type(alerts)}"
+            )
+            return False
+        
+        # Validate counts are integers
+        total_count = response1.get("total_count")
+        unread_count = response1.get("unread_count")
+        
+        if not isinstance(total_count, int) or not isinstance(unread_count, int):
+            self.log_test(
+                "GET /api/alerts count types",
+                False,
+                f"Counts should be integers, got total_count={type(total_count)}, unread_count={type(unread_count)}"
+            )
+            return False
+        
+        # Validate each alert structure (if any alerts exist)
+        for i, alert in enumerate(alerts):
+            required_alert_fields = [
+                "id", "type", "aircraft_id", "aircraft_type_key", "manufacturer", 
+                "model", "reference", "reference_type", "message", "status", "created_at"
+            ]
+            missing_alert_fields = [field for field in required_alert_fields if field not in alert]
+            
+            if missing_alert_fields:
+                self.log_test(
+                    f"Alert {i} structure validation",
+                    False,
+                    f"Missing alert fields: {missing_alert_fields}"
+                )
+                return False
+            
+            # Validate alert field values
+            if alert.get("type") != "NEW_AD_SB":
+                self.log_test(
+                    f"Alert {i} type validation",
+                    False,
+                    f"Expected type='NEW_AD_SB', got '{alert.get('type')}'"
+                )
+                return False
+            
+            if alert.get("reference_type") not in ["AD", "SB"]:
+                self.log_test(
+                    f"Alert {i} reference_type validation",
+                    False,
+                    f"Expected reference_type='AD' or 'SB', got '{alert.get('reference_type')}'"
+                )
+                return False
+            
+            if alert.get("status") not in ["UNREAD", "READ", "DISMISSED"]:
+                self.log_test(
+                    f"Alert {i} status validation",
+                    False,
+                    f"Expected status in ['UNREAD', 'READ', 'DISMISSED'], got '{alert.get('status')}'"
+                )
+                return False
+        
+        self.log_test(
+            "GET /api/alerts validation",
+            True,
+            f"All validations passed. Total alerts: {total_count}, Unread: {unread_count}"
+        )
+        
+        # Test 2: GET /api/alerts/count - Get alert counts
+        print("📋 Test 2: GET /api/alerts/count returns counts")
+        success2, response2 = self.run_test(
+            "Get alert counts",
+            "GET",
+            "api/alerts/count",
+            200
+        )
+        
+        if not success2:
+            return False
+        
+        # Validate count response structure matches expected format
+        required_count_fields = ["unread_count", "total_count"]
+        missing_count_fields = [field for field in required_count_fields if field not in response2]
+        
+        if missing_count_fields:
+            self.log_test(
+                "GET /api/alerts/count response structure",
+                False,
+                f"Missing required fields: {missing_count_fields}"
+            )
+            return False
+        
+        # Validate count consistency with alerts list
+        if response2.get("unread_count") != response1.get("unread_count"):
+            self.log_test(
+                "Alert count consistency",
+                False,
+                f"Unread count mismatch: list={response1.get('unread_count')}, count={response2.get('unread_count')}"
+            )
+            return False
+        
+        self.log_test(
+            "GET /api/alerts/count validation",
+            True,
+            f"Count endpoint working. Unread: {response2.get('unread_count')}, Total: {response2.get('total_count')}"
+        )
+        
+        # Test 3: Verify alert item structure (if alerts exist)
+        print("📋 Test 3: Verify alert item structure")
+        if len(alerts) > 0:
+            first_alert = alerts[0]
+            
+            # Validate all required fields from review request
+            expected_fields = {
+                "id": str,
+                "type": str,
+                "aircraft_id": str,
+                "aircraft_type_key": str,
+                "manufacturer": (str, type(None)),
+                "model": (str, type(None)),
+                "reference": str,
+                "reference_type": str,
+                "message": str,
+                "status": str,
+                "created_at": str
+            }
+            
+            for field, expected_type in expected_fields.items():
+                if field not in first_alert:
+                    self.log_test(
+                        f"Alert item field presence - {field}",
+                        False,
+                        f"Field '{field}' missing from alert item"
+                    )
+                    return False
+                
+                field_value = first_alert.get(field)
+                if isinstance(expected_type, tuple):
+                    # Allow multiple types (e.g., str or None)
+                    if not isinstance(field_value, expected_type):
+                        self.log_test(
+                            f"Alert item field type - {field}",
+                            False,
+                            f"Field '{field}' should be {expected_type}, got {type(field_value)}"
+                        )
+                        return False
+                else:
+                    # Single type expected
+                    if not isinstance(field_value, expected_type):
+                        self.log_test(
+                            f"Alert item field type - {field}",
+                            False,
+                            f"Field '{field}' should be {expected_type.__name__}, got {type(field_value).__name__}"
+                        )
+                        return False
+            
+            # Validate aircraft_type_key format (should be like "CESSNA::172M")
+            aircraft_type_key = first_alert.get("aircraft_type_key", "")
+            if "::" not in aircraft_type_key:
+                self.log_test(
+                    "Alert item aircraft_type_key format",
+                    False,
+                    f"aircraft_type_key should contain '::' separator, got '{aircraft_type_key}'"
+                )
+                return False
+            
+            self.log_test(
+                "Alert item structure validation",
+                True,
+                f"Alert item has all required fields with correct types. aircraft_type_key: '{aircraft_type_key}'"
+            )
+        else:
+            self.log_test(
+                "Alert item structure validation",
+                True,
+                "No alerts available for structure testing (expected for new system)"
+            )
+        
+        # Test 4: PUT /api/alerts/read-all works
+        print("📋 Test 4: PUT /api/alerts/read-all works")
+        success4, response4 = self.run_test(
+            "Mark all alerts as read",
+            "PUT",
+            "api/alerts/read-all",
+            200
+        )
+        
+        if not success4:
+            return False
+        
+        # Validate read-all response structure
+        if not isinstance(response4, dict) or "ok" not in response4 or "marked_count" not in response4:
+            self.log_test(
+                "PUT /api/alerts/read-all response structure",
+                False,
+                f"Expected dict with 'ok' and 'marked_count' fields, got {response4}"
+            )
+            return False
+        
+        if response4.get("ok") != True:
+            self.log_test(
+                "PUT /api/alerts/read-all ok field",
+                False,
+                f"Expected ok=True, got {response4.get('ok')}"
+            )
+            return False
+        
+        marked_count = response4.get("marked_count")
+        if not isinstance(marked_count, int) or marked_count < 0:
+            self.log_test(
+                "PUT /api/alerts/read-all marked_count field",
+                False,
+                f"Expected marked_count to be non-negative integer, got {marked_count}"
+            )
+            return False
+        
+        self.log_test(
+            "PUT /api/alerts/read-all validation",
+            True,
+            f"Read-all endpoint working. Marked {marked_count} alerts as read"
+        )
+        
+        return success1 and success2 and success4
+
     def test_aircraft_default_values(self):
         """Test default values for Purpose and City/Airport fields as per review request"""
         print("✈️ Testing Aircraft Default Values for Purpose and Base City...")
