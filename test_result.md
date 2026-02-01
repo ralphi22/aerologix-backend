@@ -120,6 +120,18 @@ metadata:
   test_sequence: 1
   run_ui: false
 
+  - task: "AD/SB OCR Frequency Tracking"
+    implemented: true
+    working: false
+    file: "/app/backend/routes/adsb.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "main"
+        comment: "NEW FEATURE: Added frequency/recurrence tracking to OCR AD/SB endpoint. Each item now includes recurrence_type, recurrence_value, recurrence_display (human-readable in French), next_due_date, days_until_due, is_recurring flag. Cross-references with TC baseline to enrich OCR-detected items with official recurrence data. Response now includes total_recurring count."
+
 test_plan:
   current_focus: []
   stuck_tasks: []
