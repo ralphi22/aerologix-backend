@@ -1470,7 +1470,7 @@ async def aircraft_adsb_structured_alias(
 # ============================================================
 
 class OCRScanADSBItem(BaseModel):
-    """Single AD/SB reference detected from scanned documents"""
+    """Single AD/SB reference detected from scanned documents with frequency tracking"""
     id: Optional[str] = None  # MongoDB _id of the most recent record (if from adsb_records)
     reference: str
     type: str  # "AD" or "SB"
@@ -1483,6 +1483,18 @@ class OCRScanADSBItem(BaseModel):
     last_seen_date: Optional[str] = None  # Most recent detection date
     scan_ids: List[str] = []  # List of OCR scan IDs where detected
     record_ids: List[str] = []  # List of adsb_records _ids for this reference
+    # ============================================================
+    # FREQUENCY / RECURRENCE TRACKING (enriched from TC baseline)
+    # ============================================================
+    recurrence_type: Optional[str] = None  # ONCE, HOURS, YEARS, ANNUAL, etc.
+    recurrence_value: Optional[int] = None  # Number value (e.g., 5 for "5 years")
+    recurrence_display: Optional[str] = None  # Human-readable: "Annuel", "Tous les 5 ans", etc.
+    next_due_date: Optional[str] = None  # Estimated next verification date (if calculable)
+    is_recurring: bool = False  # True if this AD/SB requires periodic verification
+    days_until_due: Optional[int] = None  # Days until next verification (null if not calculable)
+    # TC cross-reference
+    tc_matched: bool = False  # True if matched to TC baseline
+    tc_effective_date: Optional[str] = None  # Effective date from TC
 
 
 class OCRScanADSBResponse(BaseModel):
