@@ -244,31 +244,32 @@ class AeroLogixBackendTester:
             return response['tc_adsb_version']
         return None
 
-    def test_critical_mentions_endpoint(self):
-        """Test GET /api/limitations/{aircraft_id}/critical-mentions"""
-        print("🔍 Testing Critical Mentions Endpoint...")
+    def test_critical_mentions_deduplication(self):
+        """Test Critical Mentions Deduplication as per review request"""
+        print("🔍 Testing Critical Mentions Deduplication...")
         
         # Get aircraft ID first
         aircraft_id, registration = self.get_aircraft_list()
         
         if not aircraft_id:
-            self.log_test("Critical mentions test", False, "No aircraft available for testing")
+            self.log_test("Critical mentions deduplication test setup", False, "No aircraft available for testing")
             return False
         
-        # Test the critical-mentions endpoint
-        success, response = self.run_test(
+        # Test 1: Verify GET /api/limitations/{aircraft_id}/critical-mentions returns correct structure
+        print("📋 Test 1: Verify response structure with deduplication info")
+        success1, response1 = self.run_test(
             f"Get critical mentions for aircraft {registration}",
             "GET",
             f"api/limitations/{aircraft_id}/critical-mentions",
             200
         )
         
-        if not success:
+        if not success1:
             return False
         
-        # Validate response structure
+        # Validate response structure matches expected format from review request
         required_fields = ["aircraft_id", "registration", "critical_mentions", "summary", "disclaimer"]
-        missing_fields = [field for field in required_fields if field not in response]
+        missing_fields = [field for field in required_fields if field not in response1]
         
         if missing_fields:
             self.log_test(
@@ -279,7 +280,7 @@ class AeroLogixBackendTester:
             return False
         
         # Validate critical_mentions structure
-        critical_mentions = response.get("critical_mentions", {})
+        critical_mentions = response1.get("critical_mentions", {})
         expected_categories = ["elt", "avionics", "fire_extinguisher", "general_limitations"]
         missing_categories = [cat for cat in expected_categories if cat not in critical_mentions]
         
@@ -291,14 +292,17 @@ class AeroLogixBackendTester:
             )
             return False
         
-        # Validate summary structure
-        summary = response.get("summary", {})
-        expected_summary_fields = ["elt_count", "avionics_count", "fire_extinguisher_count", "general_limitations_count", "total_count"]
+        # Validate summary structure includes deduplication info
+        summary = response1.get("summary", {})
+        expected_summary_fields = [
+            "elt_count", "avionics_count", "fire_extinguisher_count", 
+            "general_limitations_count", "total_count", "raw_total", "duplicates_removed"
+        ]
         missing_summary_fields = [field for field in expected_summary_fields if field not in summary]
         
         if missing_summary_fields:
             self.log_test(
-                "Critical mentions summary structure",
+                "Critical mentions summary structure with deduplication",
                 False,
                 f"Missing summary fields: {missing_summary_fields}"
             )
@@ -313,6 +317,150 @@ class AeroLogixBackendTester:
                     f"{category} should be an array, got {type(critical_mentions[category])}"
                 )
                 return False
+        
+        # Test 2: Verify each mention has can_delete field
+        print("📋 Test 2: Verify each mention has can_delete field")
+        all_mentions = []
+        for category in expected_categories:
+            all_mentions.extend(critical_mentions[category])
+        
+        for i, mention in enumerate(all_mentions):
+            required_mention_fields = ["id", "text", "can_delete", "source"]
+            missing_mention_fields = [field for field in required_mention_fields if field not in mention]
+            
+            if missing_mention_fields:
+                self.log_test(
+                    f"Mention {i} structure validation",
+                    False,
+                    f"Missing mention fields: {missing_mention_fields}"
+                )
+                return False
+            
+            # Validate can_delete is boolean
+            if not isinstance(mention.get("can_delete"), bool):
+                self.log_test(
+                    f"Mention {i} can_delete field type",
+                    False,
+                    f"can_delete should be boolean, got {type(mention.get('can_delete'))}"
+                )
+                return False
+            
+            # Validate id is string
+            if not isinstance(mention.get("id"), str):
+                self.log_test(
+                    f"Mention {i} id field type",
+                    False,
+                    f"id should be string, got {type(mention.get('id'))}"
+                )
+                return False
+            
+            # Validate text is string
+            if not isinstance(mention.get("text"), str):
+                self.log_test(
+                    f"Mention {i} text field type",
+                    False,
+                    f"text should be string, got {type(mention.get('text'))}"
+                )
+                return False
+            
+            # Validate source is string
+            if not isinstance(mention.get("source"), str):
+                self.log_test(
+                    f"Mention {i} source field type",
+                    False,
+                    f"source should be string, got {type(mention.get('source'))}"
+                )
+                return False
+        
+        self.log_test(
+            "Critical mentions item structure validation",
+            True,
+            f"All {len(all_mentions)} mentions have required fields with correct types"
+        )
+        
+        # Test 3: Verify DELETE endpoint works (if deletable mentions exist)
+        print("📋 Test 3: Verify DELETE endpoint")
+        deletable_mentions = [m for m in all_mentions if m.get("can_delete") == True]
+        
+        if deletable_mentions:
+            # Try to delete the first deletable mention
+            first_deletable = deletable_mentions[0]
+            limitation_id = first_deletable["id"]
+            
+            success3, response3 = self.run_test(
+                f"Delete limitation {limitation_id}",
+                "DELETE",
+                f"api/limitations/{aircraft_id}/{limitation_id}",
+                200
+            )
+            
+            if success3:
+                # Validate delete response structure
+                if not isinstance(response3, dict) or "message" not in response3 or "limitation_id" not in response3:
+                    self.log_test(
+                        "DELETE limitation response structure",
+                        False,
+                        f"Expected dict with 'message' and 'limitation_id' fields, got {response3}"
+                    )
+                    return False
+                
+                if response3.get("limitation_id") != limitation_id:
+                    self.log_test(
+                        "DELETE limitation response validation",
+                        False,
+                        f"Expected limitation_id={limitation_id}, got {response3.get('limitation_id')}"
+                    )
+                    return False
+                
+                self.log_test(
+                    "DELETE limitation endpoint",
+                    True,
+                    f"Successfully deleted limitation {limitation_id}"
+                )
+            else:
+                self.log_test(
+                    "DELETE limitation endpoint",
+                    False,
+                    f"Failed to delete limitation {limitation_id}"
+                )
+                return False
+        else:
+            self.log_test(
+                "DELETE limitation endpoint",
+                True,
+                "No deletable mentions available for testing (expected for clean system)"
+            )
+        
+        # Test DELETE with invalid limitation ID (should return 404)
+        success4, response4 = self.run_test(
+            "Delete invalid limitation",
+            "DELETE",
+            f"api/limitations/{aircraft_id}/invalid_limitation_id",
+            404
+        )
+        
+        if not success4:
+            self.log_test(
+                "DELETE invalid limitation error handling",
+                False,
+                "Expected 404 for invalid limitation_id"
+            )
+            return False
+        
+        # Test 4: Verify summary includes deduplication info
+        print("📋 Test 4: Verify deduplication summary")
+        raw_total = summary.get("raw_total", 0)
+        total_count = summary.get("total_count", 0)
+        duplicates_removed = summary.get("duplicates_removed", 0)
+        
+        # Validate deduplication math
+        if raw_total - duplicates_removed != total_count:
+            self.log_test(
+                "Deduplication math validation",
+                False,
+                f"raw_total({raw_total}) - duplicates_removed({duplicates_removed}) != total_count({total_count})"
+            )
+            return False
         
         # Validate counts match actual data
         actual_counts = {
@@ -336,11 +484,10 @@ class AeroLogixBackendTester:
             )
             return False
         
-        # Log successful validation
         self.log_test(
-            "Critical mentions endpoint validation",
+            "Deduplication summary validation",
             True,
-            f"All validations passed. Total mentions: {actual_total}, Categories: {actual_counts}"
+            f"Deduplication working correctly. Raw: {raw_total}, Final: {total_count}, Duplicates removed: {duplicates_removed}"
         )
         
         # Test with invalid aircraft ID
@@ -351,7 +498,22 @@ class AeroLogixBackendTester:
             404
         )
         
-        return success and success_invalid
+        if not success_invalid:
+            self.log_test(
+                "Invalid aircraft ID error handling",
+                False,
+                "Expected 404 for invalid aircraft_id"
+            )
+            return False
+        
+        # Log overall success
+        self.log_test(
+            "Critical mentions deduplication complete",
+            True,
+            f"All 4 test scenarios passed. Structure validated, {len(all_mentions)} mentions with can_delete fields, DELETE endpoint working, deduplication summary correct"
+        )
+        
+        return success1 and success4
 
     def test_tc_version_endpoint(self):
         """Test GET /api/tc-adsb/version"""
