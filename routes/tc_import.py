@@ -52,6 +52,9 @@ class ImportedReferenceItem(BaseModel):
     tc_pdf_id: str = Field(..., description="UUID - use for GET PDF")
     pdf_available: bool = True
     created_at: str
+    # DISPLAY FIELDS
+    title: Optional[str] = Field(None, description="Title/description of the AD/SB")
+    filename: Optional[str] = Field(None, description="Original filename of uploaded PDF")
     # EXPLICIT PERMISSION FLAGS (for frontend)
     has_user_pdf: bool = Field(True, description="True if user uploaded PDF exists")
     can_delete: bool = Field(True, description="True - user can always delete their imports")
