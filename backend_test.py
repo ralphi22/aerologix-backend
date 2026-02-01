@@ -1665,6 +1665,210 @@ class AeroLogixBackendTester:
         
         return success1 and success2 and success3 and success4
 
+    def test_tc_pdf_import_title_display_fix(self):
+        """Test TC PDF Import - Title Display Fix as per review request"""
+        print("📄 Testing TC PDF Import - Title Display Fix...")
+        
+        # Get aircraft ID first
+        aircraft_id, registration = self.get_aircraft_list()
+        
+        if not aircraft_id:
+            self.log_test("TC PDF Import title display test setup", False, "No aircraft available for testing")
+            return False
+        
+        # Test 1: Verify GET endpoint returns correct structure
+        print("📋 Test 1: Verify GET endpoint returns correct structure")
+        success1, response1 = self.run_test(
+            f"Get TC imported references for aircraft {registration}",
+            "GET",
+            f"api/adsb/tc/references/{aircraft_id}",
+            200
+        )
+        
+        if not success1:
+            return False
+        
+        # Validate response structure
+        required_fields = ["aircraft_id", "total_count", "references"]
+        missing_fields = [field for field in required_fields if field not in response1]
+        
+        if missing_fields:
+            self.log_test(
+                "TC imported references response structure",
+                False,
+                f"Missing required fields: {missing_fields}"
+            )
+            return False
+        
+        # Validate aircraft_id matches
+        if response1.get("aircraft_id") != aircraft_id:
+            self.log_test(
+                "TC imported references aircraft_id validation",
+                False,
+                f"Expected aircraft_id={aircraft_id}, got {response1.get('aircraft_id')}"
+            )
+            return False
+        
+        # Validate references is an array
+        references = response1.get("references", [])
+        if not isinstance(references, list):
+            self.log_test(
+                "TC imported references format",
+                False,
+                f"References should be an array, got {type(references)}"
+            )
+            return False
+        
+        self.log_test(
+            "TC imported references response structure validation",
+            True,
+            f"All required fields present. Total references: {response1.get('total_count', 0)}"
+        )
+        
+        # Test 2: Verify all new fields are present in each reference
+        print("📋 Test 2: Verify all new fields are present")
+        
+        if len(references) > 0:
+            # Test with existing references
+            for i, reference in enumerate(references):
+                # Required fields for each reference
+                required_ref_fields = [
+                    "tc_reference_id", "identifier", "type", "tc_pdf_id", 
+                    "pdf_available", "created_at", "title", "filename",
+                    "has_user_pdf", "can_delete", "can_open_pdf"
+                ]
+                missing_ref_fields = [field for field in required_ref_fields if field not in reference]
+                
+                if missing_ref_fields:
+                    self.log_test(
+                        f"TC reference {i} structure",
+                        False,
+                        f"Missing reference fields: {missing_ref_fields}"
+                    )
+                    return False
+                
+                # Validate field types
+                if not isinstance(reference.get("can_delete"), bool):
+                    self.log_test(
+                        f"TC reference {i} can_delete type",
+                        False,
+                        f"can_delete should be boolean, got {type(reference.get('can_delete'))}"
+                    )
+                    return False
+                
+                if not isinstance(reference.get("can_open_pdf"), bool):
+                    self.log_test(
+                        f"TC reference {i} can_open_pdf type",
+                        False,
+                        f"can_open_pdf should be boolean, got {type(reference.get('can_open_pdf'))}"
+                    )
+                    return False
+                
+                if not isinstance(reference.get("has_user_pdf"), bool):
+                    self.log_test(
+                        f"TC reference {i} has_user_pdf type",
+                        False,
+                        f"has_user_pdf should be boolean, got {type(reference.get('has_user_pdf'))}"
+                    )
+                    return False
+                
+                # Validate can_delete is always true for user imports
+                if reference.get("can_delete") != True:
+                    self.log_test(
+                        f"TC reference {i} can_delete value",
+                        False,
+                        f"can_delete should always be true for user imports, got {reference.get('can_delete')}"
+                    )
+                    return False
+                
+                # Validate title and filename fields exist (can be null)
+                title = reference.get("title")
+                filename = reference.get("filename")
+                
+                # Title and filename can be null, but fields must exist
+                if "title" not in reference:
+                    self.log_test(
+                        f"TC reference {i} title field presence",
+                        False,
+                        "title field missing from reference"
+                    )
+                    return False
+                
+                if "filename" not in reference:
+                    self.log_test(
+                        f"TC reference {i} filename field presence",
+                        False,
+                        "filename field missing from reference"
+                    )
+                    return False
+                
+                self.log_test(
+                    f"TC reference {i} validation",
+                    True,
+                    f"All fields present: title='{title}', filename='{filename}', can_delete={reference.get('can_delete')}, can_open_pdf={reference.get('can_open_pdf')}"
+                )
+            
+            # Test 3: Verify PDF endpoint works if any reference has can_open_pdf: true
+            print("📋 Test 3: Verify PDF endpoint works")
+            
+            pdf_testable_refs = [ref for ref in references if ref.get("can_open_pdf") == True]
+            
+            if pdf_testable_refs:
+                test_ref = pdf_testable_refs[0]
+                tc_pdf_id = test_ref.get("tc_pdf_id")
+                
+                success3, response3 = self.run_test(
+                    f"Get PDF for tc_pdf_id {tc_pdf_id}",
+                    "GET",
+                    f"api/adsb/tc/pdf/{tc_pdf_id}",
+                    200
+                )
+                
+                if success3:
+                    self.log_test(
+                        "TC PDF endpoint validation",
+                        True,
+                        f"PDF endpoint working for tc_pdf_id={tc_pdf_id}"
+                    )
+                else:
+                    self.log_test(
+                        "TC PDF endpoint validation",
+                        False,
+                        f"PDF endpoint failed for tc_pdf_id={tc_pdf_id}"
+                    )
+                    return False
+            else:
+                self.log_test(
+                    "TC PDF endpoint validation",
+                    True,
+                    "No PDFs available for testing (expected for empty system)"
+                )
+        else:
+            # No references exist - this is expected for a clean system
+            self.log_test(
+                "TC imported references validation (empty system)",
+                True,
+                "No references found - expected for clean system. Response structure is correct."
+            )
+        
+        # Test with invalid aircraft ID
+        success_invalid, response_invalid = self.run_test(
+            "Get TC references for invalid aircraft",
+            "GET",
+            "api/adsb/tc/references/invalid_aircraft_id",
+            404
+        )
+        
+        if not success_invalid:
+            self.log_test(
+                "TC references invalid aircraft test",
+                False,
+                "Expected 404 for invalid aircraft_id"
+            )
+            return False
+        
+        return success1 and success_invalid
+
     def test_adsb_ocr_frequency_tracking(self):
         """Test AD/SB OCR Frequency Tracking as per review request"""
         print("🔍 Testing AD/SB OCR Frequency Tracking...")
