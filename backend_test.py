@@ -1665,6 +1665,199 @@ class AeroLogixBackendTester:
         
         return success1 and success2 and success3 and success4
 
+    def test_adsb_ocr_frequency_tracking(self):
+        """Test AD/SB OCR Frequency Tracking as per review request"""
+        print("🔍 Testing AD/SB OCR Frequency Tracking...")
+        
+        # Get aircraft ID first
+        aircraft_id, registration = self.get_aircraft_list()
+        
+        if not aircraft_id:
+            self.log_test("AD/SB OCR frequency tracking test setup", False, "No aircraft available for testing")
+            return False
+        
+        # Test 1: Verify GET endpoint returns correct structure
+        print("📋 Test 1: Verify GET endpoint returns correct structure")
+        success1, response1 = self.run_test(
+            f"Get OCR scan AD/SB with frequency tracking for aircraft {registration}",
+            "GET",
+            f"api/adsb/ocr-scan/{aircraft_id}",
+            200
+        )
+        
+        if not success1:
+            return False
+        
+        # Validate response structure includes new fields
+        required_fields = [
+            "aircraft_id", "registration", "items", "total_unique_references",
+            "total_ad", "total_sb", "total_recurring", "documents_analyzed", 
+            "source", "disclaimer"
+        ]
+        missing_fields = [field for field in required_fields if field not in response1]
+        
+        if missing_fields:
+            self.log_test(
+                "OCR scan AD/SB frequency tracking response structure",
+                False,
+                f"Missing required fields: {missing_fields}"
+            )
+            return False
+        
+        # Validate new total_recurring field
+        total_recurring = response1.get("total_recurring")
+        if not isinstance(total_recurring, int):
+            self.log_test(
+                "OCR scan AD/SB total_recurring field type",
+                False,
+                f"total_recurring should be integer, got {type(total_recurring)}"
+            )
+            return False
+        
+        self.log_test(
+            "OCR scan AD/SB response structure validation",
+            True,
+            f"All required fields present including total_recurring={total_recurring}"
+        )
+        
+        # Test 2: Verify item structure includes frequency fields
+        print("📋 Test 2: Verify item structure includes frequency fields")
+        items = response1.get("items", [])
+        
+        if not isinstance(items, list):
+            self.log_test(
+                "OCR scan AD/SB items format",
+                False,
+                f"Items should be an array, got {type(items)}"
+            )
+            return False
+        
+        # Validate each item structure includes new frequency fields
+        for i, item in enumerate(items):
+            required_item_fields = [
+                "id", "reference", "type", "occurrence_count",
+                "recurrence_type", "recurrence_value", "recurrence_display",
+                "next_due_date", "days_until_due", "is_recurring",
+                "tc_matched", "tc_effective_date"
+            ]
+            missing_item_fields = [field for field in required_item_fields if field not in item]
+            
+            if missing_item_fields:
+                self.log_test(
+                    f"OCR scan AD/SB item {i} frequency fields",
+                    False,
+                    f"Missing frequency fields: {missing_item_fields}"
+                )
+                return False
+            
+            # Validate field types
+            if not isinstance(item.get("is_recurring"), bool):
+                self.log_test(
+                    f"OCR scan AD/SB item {i} is_recurring type",
+                    False,
+                    f"is_recurring should be boolean, got {type(item.get('is_recurring'))}"
+                )
+                return False
+            
+            if not isinstance(item.get("tc_matched"), bool):
+                self.log_test(
+                    f"OCR scan AD/SB item {i} tc_matched type",
+                    False,
+                    f"tc_matched should be boolean, got {type(item.get('tc_matched'))}"
+                )
+                return False
+            
+            # Validate optional integer fields
+            for field in ["recurrence_value", "days_until_due"]:
+                value = item.get(field)
+                if value is not None and not isinstance(value, int):
+                    self.log_test(
+                        f"OCR scan AD/SB item {i} {field} type",
+                        False,
+                        f"{field} should be integer or null, got {type(value)}"
+                    )
+                    return False
+            
+            # Validate optional string fields
+            for field in ["recurrence_type", "recurrence_display", "next_due_date", "tc_effective_date"]:
+                value = item.get(field)
+                if value is not None and not isinstance(value, str):
+                    self.log_test(
+                        f"OCR scan AD/SB item {i} {field} type",
+                        False,
+                        f"{field} should be string or null, got {type(value)}"
+                    )
+                    return False
+        
+        self.log_test(
+            "OCR scan AD/SB item frequency fields validation",
+            True,
+            f"All {len(items)} items have correct frequency tracking fields"
+        )
+        
+        # Test 3: Verify no duplicates
+        print("📋 Test 3: Verify no duplicates")
+        references = [item.get("reference") for item in items]
+        unique_references = set(references)
+        
+        if len(references) != len(unique_references):
+            self.log_test(
+                "OCR scan AD/SB no duplicates validation",
+                False,
+                f"Found duplicate references. Total: {len(references)}, Unique: {len(unique_references)}"
+            )
+            return False
+        
+        # Verify total_unique_references matches actual count
+        if response1.get("total_unique_references") != len(items):
+            self.log_test(
+                "OCR scan AD/SB total_unique_references accuracy",
+                False,
+                f"total_unique_references={response1.get('total_unique_references')} != items count={len(items)}"
+            )
+            return False
+        
+        self.log_test(
+            "OCR scan AD/SB no duplicates validation",
+            True,
+            f"All {len(items)} references are unique, total_unique_references matches"
+        )
+        
+        # Test 4: Error handling for invalid aircraft_id
+        print("📋 Test 4: Error handling for invalid aircraft_id")
+        success4, response4 = self.run_test(
+            "Get OCR scan AD/SB for invalid aircraft",
+            "GET",
+            "api/adsb/ocr-scan/invalid_aircraft_id",
+            404
+        )
+        
+        if not success4:
+            self.log_test(
+                "OCR scan AD/SB invalid aircraft error handling",
+                False,
+                "Expected 404 for invalid aircraft_id"
+            )
+            return False
+        
+        self.log_test(
+            "OCR scan AD/SB error handling validation",
+            True,
+            "Correct 404 response for invalid aircraft_id"
+        )
+        
+        # Summary of frequency tracking validation
+        recurring_count = sum(1 for item in items if item.get("is_recurring"))
+        tc_matched_count = sum(1 for item in items if item.get("tc_matched"))
+        
+        self.log_test(
+            "AD/SB OCR Frequency Tracking complete validation",
+            True,
+            f"All tests passed. Items: {len(items)}, Recurring: {recurring_count}, TC matched: {tc_matched_count}, Total recurring field: {total_recurring}"
+        )
+        
+        return success1 and success4
+
     def test_adsb_ocr_deletion_fix_v2(self):
         """Test AD/SB OCR Deletion Fix V2 as per review request"""
         print("🔧 Testing AD/SB OCR Deletion Fix V2...")
