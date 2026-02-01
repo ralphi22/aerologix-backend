@@ -432,22 +432,6 @@ async def get_critical_mentions(
             if isinstance(scan["created_at"], datetime):
                 report_date_str = scan["created_at"].strftime("%Y-%m-%d")
         
-        # Build ELT mention from OCR data
-        elt_mention = {
-            "id": f"ocr_{scan.get('_id', '')}",
-            "text": None,
-            "brand": elt_data.get("brand"),
-            "model": elt_data.get("model"),
-            "serial_number": elt_data.get("serial_number"),
-            "battery_expiry_date": elt_data.get("battery_expiry_date"),
-            "battery_install_date": elt_data.get("battery_install_date"),
-            "certification_date": elt_data.get("certification_date"),
-            "beacon_hex_id": elt_data.get("beacon_hex_id"),
-            "report_id": str(scan.get("_id", "")),
-            "report_date": report_date_str,
-            "source": "ocr_extraction"
-        }
-        
         # Build readable text summary
         text_parts = []
         if elt_data.get("brand"):
@@ -457,25 +441,57 @@ async def get_critical_mentions(
         if elt_data.get("battery_expiry_date"):
             text_parts.append(f"Battery expires: {elt_data['battery_expiry_date']}")
         
-        elt_mention["text"] = " | ".join(text_parts) if text_parts else "ELT detected"
+        elt_text = " | ".join(text_parts) if text_parts else "ELT detected"
         
-        critical_mentions["elt"].append(elt_mention)
+        # Build ELT mention from OCR data
+        elt_mention = {
+            "id": f"ocr_{scan.get('_id', '')}",
+            "text": elt_text,
+            "brand": elt_data.get("brand"),
+            "model": elt_data.get("model"),
+            "serial_number": elt_data.get("serial_number"),
+            "battery_expiry_date": elt_data.get("battery_expiry_date"),
+            "battery_install_date": elt_data.get("battery_install_date"),
+            "certification_date": elt_data.get("certification_date"),
+            "beacon_hex_id": elt_data.get("beacon_hex_id"),
+            "report_id": str(scan.get("_id", "")),
+            "report_date": report_date_str,
+            "source": "ocr_extraction",
+            "can_delete": False  # OCR data cannot be deleted directly
+        }
+        
+        raw_elt.append(elt_mention)
     
     # ============================================================
-    # 3. Build summary counts
+    # 3. DEDUPLICATE each category
+    # ============================================================
+    
+    dedup_elt = _deduplicate_mentions(raw_elt)
+    dedup_avionics = _deduplicate_mentions(raw_avionics)
+    dedup_fire = _deduplicate_mentions(raw_fire_extinguisher)
+    dedup_general = _deduplicate_mentions(raw_general)
+    
+    # Build final response structure
+    critical_mentions = {
+        "elt": dedup_elt,
+        "avionics": dedup_avionics,
+        "fire_extinguisher": dedup_fire,
+        "general_limitations": dedup_general
+    }
+    
+    # ============================================================
+    # 4. Build summary counts
     # ============================================================
     
     summary = {
-        "elt_count": len(critical_mentions["elt"]),
-        "avionics_count": len(critical_mentions["avionics"]),
-        "fire_extinguisher_count": len(critical_mentions["fire_extinguisher"]),
-        "general_limitations_count": len(critical_mentions["general_limitations"]),
-        "total_count": sum([
-            len(critical_mentions["elt"]),
-            len(critical_mentions["avionics"]),
-            len(critical_mentions["fire_extinguisher"]),
-            len(critical_mentions["general_limitations"])
-        ])
+        "elt_count": len(dedup_elt),
+        "avionics_count": len(dedup_avionics),
+        "fire_extinguisher_count": len(dedup_fire),
+        "general_limitations_count": len(dedup_general),
+        "total_count": len(dedup_elt) + len(dedup_avionics) + len(dedup_fire) + len(dedup_general),
+        # Also include raw counts for debugging
+        "raw_total": len(raw_elt) + len(raw_avionics) + len(raw_fire_extinguisher) + len(raw_general),
+        "duplicates_removed": (len(raw_elt) + len(raw_avionics) + len(raw_fire_extinguisher) + len(raw_general)) - (len(dedup_elt) + len(dedup_avionics) + len(dedup_fire) + len(dedup_general))
     }
     
     logger.info(f"Critical mentions for {aircraft_id}: {summary}")
