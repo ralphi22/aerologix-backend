@@ -189,52 +189,125 @@ async def get_limitations_summary(
 # CRITICAL MENTIONS ENDPOINT - Aggregated view with DEDUPLICATION
 # ============================================================
 
+def _extract_key_phrases(text: str) -> set:
+    """
+    Extract key phrases from limitation text for fuzzy matching.
+    Returns a set of important keywords/phrases.
+    """
+    import re
+    if not text:
+        return set()
+    
+    # Uppercase for consistency
+    text = text.upper()
+    
+    # Remove JSON artifacts
+    text = re.sub(r'"[A-Z_]+"\s*:\s*(?:"[^"]*"|[\d.]+)\s*,?\s*', '', text)
+    text = re.sub(r'[\{\}\[\]\(\)]', '', text)
+    
+    # Key aviation phrases to detect
+    key_phrases = []
+    
+    # ELT related
+    if 'ELT' in text or 'E.L.T' in text:
+        key_phrases.append('ELT')
+    if 'REMOVED' in text and ('CERTIFICATION' in text or '25' in text):
+        key_phrases.append('ELT_REMOVED')
+    if 'LIMITED TO 25' in text or '25 N.M' in text or '25 NM' in text:
+        key_phrases.append('LIMITED_25NM')
+    
+    # Avionics related
+    if 'PITOT' in text or 'STATIC' in text:
+        key_phrases.append('PITOT_STATIC')
+    if 'TRANSPONDER' in text:
+        key_phrases.append('TRANSPONDER')
+    if 'ENCODER' in text:
+        key_phrases.append('ENCODER')
+    if '24 MONTH' in text or '24MONTH' in text:
+        key_phrases.append('24_MONTH_INSPECTION')
+    if 'OVERDUE' in text:
+        key_phrases.append('OVERDUE')
+    if 'CONTROL ZONE' in text:
+        key_phrases.append('CONTROL_ZONE')
+    
+    # First Aid Kit
+    if 'FIRST AID' in text or 'FIRSTAID' in text:
+        key_phrases.append('FIRST_AID_KIT')
+    if 'SERVICEABLE' in text or 'SERVICIABLE' in text:
+        key_phrases.append('SERVICEABLE')
+    
+    # Fire extinguisher
+    if 'FIRE' in text and 'EXTINGUISHER' in text:
+        key_phrases.append('FIRE_EXTINGUISHER')
+    
+    # If no specific phrases found, use first 50 chars normalized
+    if not key_phrases:
+        # Clean and take first significant words
+        cleaned = re.sub(r'[^A-Z0-9\s]', '', text)
+        words = cleaned.split()[:6]
+        key_phrases.append('_'.join(words))
+    
+    return set(key_phrases)
+
+
 def _normalize_limitation_text(text: str) -> str:
     """
     Normalize limitation text for deduplication.
-    Removes JSON artifacts, extra whitespace, and normalizes case.
+    Creates a canonical key based on important content.
     """
     import re
     if not text:
         return ""
     
-    # Remove JSON-like patterns: "TEXT": "...", "CONFIDENCE": 0.95, etc.
-    text = re.sub(r'"[A-Z_]+"\s*:\s*(?:"[^"]*"|[\d.]+)\s*,?\s*', '', text)
-    text = re.sub(r'[\{\}\[\]]', '', text)
+    # Uppercase
+    text = text.upper()
     
-    # Normalize whitespace
+    # Remove JSON-like patterns
+    text = re.sub(r'"[A-Z_]+"\s*:\s*(?:"[^"]*"|[\d.]+)\s*,?\s*', '', text)
+    text = re.sub(r'[\{\}\[\]\(\)]', '', text)
+    
+    # Remove common noise words and punctuation
+    text = re.sub(r'[.,;:\'"!?]', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
     
-    # Remove leading/trailing punctuation
-    text = text.strip('.,;: ')
+    # Extract key phrases and sort them for consistent hashing
+    phrases = sorted(_extract_key_phrases(text))
     
-    # Take first 100 chars for comparison (to handle slight variations)
-    return text[:100].upper()
+    if phrases:
+        return '|'.join(phrases)
+    
+    # Fallback: first 60 chars of cleaned text
+    return text[:60]
 
 
 def _deduplicate_mentions(mentions: list) -> list:
     """
-    Deduplicate mentions by normalized text.
-    Keeps the most recent one (by report_date) for each unique text.
+    Aggressively deduplicate mentions by extracted key phrases.
+    Keeps the most recent one (by report_date) for each unique pattern.
     """
-    seen_texts = {}
+    seen_keys = {}
     
     for mention in mentions:
-        normalized = _normalize_limitation_text(mention.get("text", ""))
-        if not normalized:
+        text = mention.get("text", "")
+        if not text:
             continue
         
-        # If we haven't seen this text, or this one is newer, keep it
-        if normalized not in seen_texts:
-            seen_texts[normalized] = mention
+        # Get normalized key
+        normalized_key = _normalize_limitation_text(text)
+        if not normalized_key:
+            continue
+        
+        # If we haven't seen this key, or this one is newer, keep it
+        if normalized_key not in seen_keys:
+            seen_keys[normalized_key] = mention
         else:
             # Compare dates - keep newer one
-            existing_date = seen_texts[normalized].get("report_date") or ""
+            existing_date = seen_keys[normalized_key].get("report_date") or ""
             new_date = mention.get("report_date") or ""
             if new_date > existing_date:
-                seen_texts[normalized] = mention
+                seen_keys[normalized_key] = mention
     
-    return list(seen_texts.values())
+    return list(seen_keys.values())
 
 
 @router.get("/{aircraft_id}/critical-mentions")
