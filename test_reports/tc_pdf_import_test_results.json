@@ -1,0 +1,113 @@
+{
+  "summary": {
+    "total_tests": 6,
+    "passed_tests": 6,
+    "success_rate": 100.0,
+    "timestamp": "2026-02-01T01:37:25.235768",
+    "test_focus": "TC PDF Import - Title Display Fix"
+  },
+  "detailed_results": [
+    {
+      "test_name": "Login with test user",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNTE0NjQ1fQ.RxucjOFLb3pIfySVUsfMnS0dZvetiFn3KKuNjWYaiW4",
+        "token_type": "bearer",
+        "user": {
+          "email": "test@aerologix.ca",
+          "name": "Test User",
+          "id": "1769733078496887",
+          "created_at": "2026-01-30T00:31:18.739000",
+          "subscription": {
+            "plan_code": "BASIC",
+            "plan": "BASIC",
+            "status": "active",
+            "stripe_customer_id": null,
+            "stripe_subscription_id": null,
+            "trial_end": null,
+            "current_period_end": null
+          },
+          "limits": {
+            "max_aircrafts": 1,
+            "ocr_per_month": 5,
+            "logbook_entries_per_month": 10,
+            "gps_logbook": false,
+            "tea_amo_sharing": false,
+            "invoices": false,
+            "cost_per_hour": false,
+            "prebuy": false,
+            "has_fleet_access": false,
+            "has_mechanic_sharing": false
+          }
+        }
+      },
+      "timestamp": "2026-02-01T01:37:25.217475"
+    },
+    {
+      "test_name": "Get aircraft list",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": [
+        {
+          "registration": "C-GTEST",
+          "aircraft_type": null,
+          "manufacturer": null,
+          "model": "172",
+          "year": 2020,
+          "serial_number": "TEST123456",
+          "airframe_hours": 2000.0,
+          "engine_hours": 1800.0,
+          "propeller_hours": 1000.0,
+          "photo_url": null,
+          "description": "Test update",
+          "purpose": "Non sp\u00e9cifi\u00e9",
+          "base_city": "Non sp\u00e9cifi\u00e9",
+          "adsb_has_new_tc_items": false,
+          "count_new_adsb": 0,
+          "last_tc_adsb_version": null,
+          "last_adsb_reviewed_at": null,
+          "_id": "1769733120179849",
+          "user_id": "1769733078496887",
+          "created_at": "2026-01-30T00:32:00.179000",
+          "updated_at": "2026-01-31T13:44:04.795000"
+        }
+      ],
+      "timestamp": "2026-02-01T01:37:25.225993"
+    },
+    {
+      "test_name": "Get TC imported references for aircraft C-GTEST",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "aircraft_id": "1769733120179849",
+        "total_count": 0,
+        "references": []
+      },
+      "timestamp": "2026-02-01T01:37:25.231736"
+    },
+    {
+      "test_name": "TC imported references response structure validation",
+      "success": true,
+      "details": "All required fields present. Total references: 0",
+      "response_data": null,
+      "timestamp": "2026-02-01T01:37:25.231819"
+    },
+    {
+      "test_name": "TC imported references validation (empty system)",
+      "success": true,
+      "details": "No references found - expected for clean system. Response structure is correct.",
+      "response_data": null,
+      "timestamp": "2026-02-01T01:37:25.231832"
+    },
+    {
+      "test_name": "Get TC references for invalid aircraft",
+      "success": true,
+      "details": "Status: 404",
+      "response_data": {
+        "detail": "Aircraft not found"
+      },
+      "timestamp": "2026-02-01T01:37:25.235575"
+    }
+  ]
+}
