@@ -152,14 +152,25 @@ async def import_pdf_tc(
 @router.get(
     "/references/{aircraft_id}",
     response_model=ImportedReferencesResponse,
-    summary="List imported TC references"
+    summary="List imported TC references with scan comparison"
 )
 async def list_imported_references(
     aircraft_id: str,
     current_user: User = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """List all imported references for an aircraft."""
+    """
+    List all imported references for an aircraft WITH scan comparison.
+    
+    For each TC imported AD/SB:
+    - seen_in_scans: True if found in OCR scanned documents (badge Vu/green)
+    - scan_count: Number of times seen in scans
+    - last_scan_date: Most recent scan date where found
+    
+    Response also includes total_seen and total_not_seen for summary display.
+    """
+    import re
+    
     # Validate aircraft ownership
     aircraft = await db.aircrafts.find_one({
         "_id": aircraft_id,
@@ -169,11 +180,62 @@ async def list_imported_references(
     if not aircraft:
         raise HTTPException(status_code=404, detail="Aircraft not found")
     
-    # Query tc_imported_references
+    # ============================================================
+    # STEP 1: Build OCR scan reference lookup
+    # ============================================================
+    # Get all references from OCR scanned documents
+    ocr_references: dict = {}  # {normalized_ref: {count, last_date}}
+    
+    ocr_cursor = db.ocr_scans.find({
+        "aircraft_id": aircraft_id,
+        "user_id": current_user.id,
+        "status": "APPLIED"
+    })
+    
+    async for scan in ocr_cursor:
+        scan_date = scan.get("created_at")
+        date_str = scan_date.strftime("%Y-%m-%d") if scan_date else None
+        
+        extracted_data = scan.get("extracted_data", {})
+        adsb_refs = extracted_data.get("ad_sb_references", [])
+        
+        for ref in adsb_refs:
+            # Extract reference string
+            if isinstance(ref, dict):
+                raw_ref = ref.get("reference_number") or ref.get("identifier") or ref.get("ref") or ""
+            elif isinstance(ref, str):
+                raw_ref = ref
+            else:
+                continue
+            
+            if not raw_ref:
+                continue
+            
+            # Normalize for matching
+            normalized = _normalize_for_comparison(raw_ref)
+            if not normalized:
+                continue
+            
+            if normalized not in ocr_references:
+                ocr_references[normalized] = {"count": 0, "last_date": None}
+            
+            ocr_references[normalized]["count"] += 1
+            if date_str:
+                if not ocr_references[normalized]["last_date"] or date_str > ocr_references[normalized]["last_date"]:
+                    ocr_references[normalized]["last_date"] = date_str
+    
+    logger.info(f"[TC REFS] OCR lookup built: {len(ocr_references)} unique references")
+    
+    # ============================================================
+    # STEP 2: Query TC imported references and compare
+    # ============================================================
     cursor = db.tc_imported_references.find({"aircraft_id": aircraft_id})
     docs = await cursor.to_list(length=1000)
     
     references = []
+    total_seen = 0
+    total_not_seen = 0
+    
     for doc in docs:
         created_at = doc.get("created_at")
         created_at_str = created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at)
@@ -198,32 +260,134 @@ async def list_imported_references(
                     title = pdf_doc.get("title")
         
         # Build a default title if none exists
+        identifier = doc.get("identifier", "")
         if not title:
-            identifier = doc.get("identifier", "")
             doc_type = doc.get("type", "AD")
             title = f"{doc_type} {identifier}"
         
+        # ============================================================
+        # COMPARE WITH OCR SCANS
+        # ============================================================
+        normalized_tc_ref = _normalize_for_comparison(identifier)
+        
+        seen_in_scans = False
+        scan_count = 0
+        last_scan_date = None
+        
+        if normalized_tc_ref:
+            # Try exact match first
+            if normalized_tc_ref in ocr_references:
+                seen_in_scans = True
+                scan_count = ocr_references[normalized_tc_ref]["count"]
+                last_scan_date = ocr_references[normalized_tc_ref]["last_date"]
+            else:
+                # Try partial/flexible matching
+                for ocr_ref, ocr_data in ocr_references.items():
+                    if _references_match(normalized_tc_ref, ocr_ref):
+                        seen_in_scans = True
+                        scan_count = ocr_data["count"]
+                        last_scan_date = ocr_data["last_date"]
+                        break
+        
+        if seen_in_scans:
+            total_seen += 1
+        else:
+            total_not_seen += 1
+        
         references.append(ImportedReferenceItem(
-            tc_reference_id=str(doc["_id"]),  # ObjectId → string
-            identifier=doc.get("identifier", ""),
+            tc_reference_id=str(doc["_id"]),
+            identifier=identifier,
             type=doc.get("type", "AD"),
-            tc_pdf_id=tc_pdf_id,  # UUID
+            tc_pdf_id=tc_pdf_id,
             pdf_available=has_pdf,
             created_at=created_at_str,
-            # DISPLAY FIELDS
             title=title,
             filename=filename,
-            # EXPLICIT FLAGS
             has_user_pdf=has_pdf,
-            can_delete=True,  # User can ALWAYS delete their imports
-            can_open_pdf=can_open  # True only if file exists
+            can_delete=True,
+            can_open_pdf=can_open,
+            # SCAN COMPARISON FIELDS
+            seen_in_scans=seen_in_scans,
+            scan_count=scan_count,
+            last_scan_date=last_scan_date
         ))
+    
+    logger.info(f"[TC REFS] aircraft={aircraft_id} | total={len(references)} | seen={total_seen} | not_seen={total_not_seen}")
     
     return ImportedReferencesResponse(
         aircraft_id=aircraft_id,
         total_count=len(references),
+        total_seen=total_seen,
+        total_not_seen=total_not_seen,
         references=references
     )
+
+
+def _normalize_for_comparison(ref: str) -> str:
+    """
+    Normalize AD/SB reference for comparison matching.
+    
+    Handles various formats:
+    - CF-1987-15, CF-2000-20R2
+    - 2011-10-09, 72-03-03R3, 80-11-04
+    """
+    import re
+    
+    if not ref:
+        return ""
+    
+    # Uppercase and strip
+    normalized = ref.strip().upper()
+    
+    # Remove "AD" or "SB" prefix
+    normalized = re.sub(r'^(AD|SB)[\s\-]*', '', normalized)
+    
+    # Normalize separators
+    normalized = re.sub(r'[\s.]+', '-', normalized)
+    normalized = normalized.strip('-')
+    
+    return normalized
+
+
+def _references_match(tc_ref: str, ocr_ref: str) -> bool:
+    """
+    Check if TC reference matches OCR reference.
+    
+    Handles cases where:
+    - CF-1987-15 should match 1987-15 or CF-1987-15
+    - 2011-10-09 should match AD 2011-10-09
+    """
+    if not tc_ref or not ocr_ref:
+        return False
+    
+    # Exact match
+    if tc_ref == ocr_ref:
+        return True
+    
+    # TC ref without CF- prefix
+    tc_no_cf = tc_ref.replace("CF-", "")
+    if tc_no_cf == ocr_ref or ocr_ref == tc_no_cf:
+        return True
+    
+    # OCR ref without CF- prefix
+    ocr_no_cf = ocr_ref.replace("CF-", "")
+    if tc_ref == ocr_no_cf or tc_no_cf == ocr_no_cf:
+        return True
+    
+    # Partial match (last parts match)
+    tc_parts = tc_ref.split("-")
+    ocr_parts = ocr_ref.split("-")
+    
+    # Compare the numeric parts (last 2-3 parts)
+    if len(tc_parts) >= 2 and len(ocr_parts) >= 2:
+        # Check if year-number parts match
+        tc_year_num = "-".join(tc_parts[-2:]) if len(tc_parts) >= 2 else tc_ref
+        ocr_year_num = "-".join(ocr_parts[-2:]) if len(ocr_parts) >= 2 else ocr_ref
+        
+        if tc_year_num == ocr_year_num:
+            return True
+    
+    return False
 
 
 # ============================================================
