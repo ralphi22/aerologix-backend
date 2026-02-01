@@ -3,7 +3,7 @@
     "total_tests": 6,
     "passed_tests": 6,
     "success_rate": 100.0,
-    "timestamp": "2026-02-01T01:37:25.235768",
+    "timestamp": "2026-02-01T04:32:55.084940",
     "test_focus": "TC PDF Import - Title Display Fix"
   },
   "detailed_results": [
@@ -12,7 +12,7 @@
       "success": true,
       "details": "Status: 200",
       "response_data": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNTE0NjQ1fQ.RxucjOFLb3pIfySVUsfMnS0dZvetiFn3KKuNjWYaiW4",
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNTI1MTc1fQ.mLRHiB8BKQ92tTVNjHh6SzMJkrEktd244pxQ30lVky8",
         "token_type": "bearer",
         "user": {
           "email": "test@aerologix.ca",
@@ -42,7 +42,7 @@
           }
         }
       },
-      "timestamp": "2026-02-01T01:37:25.217475"
+      "timestamp": "2026-02-01T04:32:55.065483"
     },
     {
       "test_name": "Get aircraft list",
@@ -73,7 +73,7 @@
           "updated_at": "2026-01-31T13:44:04.795000"
         }
       ],
-      "timestamp": "2026-02-01T01:37:25.225993"
+      "timestamp": "2026-02-01T04:32:55.074163"
     },
     {
       "test_name": "Get TC imported references for aircraft C-GTEST",
@@ -82,23 +82,25 @@
       "response_data": {
         "aircraft_id": "1769733120179849",
         "total_count": 0,
+        "total_seen": 0,
+        "total_not_seen": 0,
         "references": []
       },
-      "timestamp": "2026-02-01T01:37:25.231736"
+      "timestamp": "2026-02-01T04:32:55.080886"
     },
     {
       "test_name": "TC imported references response structure validation",
       "success": true,
       "details": "All required fields present. Total references: 0",
       "response_data": null,
-      "timestamp": "2026-02-01T01:37:25.231819"
+      "timestamp": "2026-02-01T04:32:55.080976"
     },
     {
       "test_name": "TC imported references validation (empty system)",
       "success": true,
       "details": "No references found - expected for clean system. Response structure is correct.",
       "response_data": null,
-      "timestamp": "2026-02-01T01:37:25.231832"
+      "timestamp": "2026-02-01T04:32:55.080990"
     },
     {
       "test_name": "Get TC references for invalid aircraft",
@@ -107,7 +109,7 @@
       "response_data": {
         "detail": "Aircraft not found"
       },
-      "timestamp": "2026-02-01T01:37:25.235575"
+      "timestamp": "2026-02-01T04:32:55.084729"
     }
   ]
 }
