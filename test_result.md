@@ -82,12 +82,12 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ AD/SB OCR Deletion Fix V2 verified. The DELETE /api/adsb/ocr/{aircraft_id}/reference/{reference} endpoint now correctly uses MongoDB $pull operator on ocr_scans collection to remove embedded AD/SB references. Returns proper 404 when reference not found, and correct success structure with ocr_documents_modified and adsb_records_deleted counts."
       - working: false
         agent: "main"
         comment: "FIX APPLIED: Rewrote DELETE /api/adsb/ocr/{aircraft_id}/reference/{reference} endpoint. Previous implementation was deleting from adsb_records collection, but the AD/SB references from OCR are stored as embedded arrays inside ocr_scans documents (extracted_data.ad_sb_references). New implementation uses MongoDB $pull operator to remove matching elements from the embedded array. Also deletes from adsb_records as fallback for legacy data."
-      - working: true
-        agent: "testing"
-        comment: "✅ AD/SB OCR Deletion Fix V2 fully tested and working. All 4 test scenarios passed with 100% success rate: (1) DELETE /api/adsb/ocr/{aircraft_id}/reference/{reference} endpoint structure verified - returns 404 with correct message 'No AD/SB references found for: CF-9999-99' for non-existent references, (2) Expected success response structure validated with required fields: message, reference, ocr_documents_modified, adsb_records_deleted, success, (3) GET /api/adsb/ocr-scan/{aircraft_id} endpoint still works correctly with proper response structure including aircraft_id, items, total_unique_references, source='scanned_documents', (4) URL format validation confirmed - endpoint correctly handles URL-encoded references like CF-2024-01. Authentication with test@aerologix.ca/password123 works properly. The fix correctly targets ocr_scans collection using MongoDB $pull operator on extracted_data.ad_sb_references array, with fallback deletion from adsb_records for legacy data."
 
   - task: "TC Import Endpoints"
     implemented: true
