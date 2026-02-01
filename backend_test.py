@@ -1665,7 +1665,7 @@ class AeroLogixBackendTester:
         
         return success1 and success2 and success3 and success4
 
-    def test_adsb_ocr_deletion_fix(self):
+    def test_adsb_ocr_deletion_fix_v2(self):
         """Test AD/SB OCR endpoints for the deletion fix as per review request"""
         print("🔧 Testing AD/SB OCR Deletion Fix Endpoints...")
         
