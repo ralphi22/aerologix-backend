@@ -2136,7 +2136,7 @@ def main():
     print()
     
     # Run the specific AD/SB OCR deletion fix test
-    success = tester.test_adsb_ocr_deletion_fix()
+    success = tester.test_adsb_ocr_deletion_fix_v2()
     
     # Print summary
     print("=" * 60)
