@@ -1,0 +1,141 @@
+{
+  "summary": {
+    "total_tests": 9,
+    "passed_tests": 9,
+    "success_rate": 100.0,
+    "timestamp": "2026-02-01T00:32:17.668155",
+    "test_focus": "AD/SB OCR Frequency Tracking"
+  },
+  "detailed_results": [
+    {
+      "test_name": "Login with test user",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNTEwNzM3fQ.sJMSp5IERKTwZwQdVJDEERycd3qoNpnRylVyWaJLP7k",
+        "token_type": "bearer",
+        "user": {
+          "email": "test@aerologix.ca",
+          "name": "Test User",
+          "id": "1769733078496887",
+          "created_at": "2026-01-30T00:31:18.739000",
+          "subscription": {
+            "plan_code": "BASIC",
+            "plan": "BASIC",
+            "status": "active",
+            "stripe_customer_id": null,
+            "stripe_subscription_id": null,
+            "trial_end": null,
+            "current_period_end": null
+          },
+          "limits": {
+            "max_aircrafts": 1,
+            "ocr_per_month": 5,
+            "logbook_entries_per_month": 10,
+            "gps_logbook": false,
+            "tea_amo_sharing": false,
+            "invoices": false,
+            "cost_per_hour": false,
+            "prebuy": false,
+            "has_fleet_access": false,
+            "has_mechanic_sharing": false
+          }
+        }
+      },
+      "timestamp": "2026-02-01T00:32:17.655499"
+    },
+    {
+      "test_name": "Get aircraft list",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": [
+        {
+          "registration": "C-GTEST",
+          "aircraft_type": null,
+          "manufacturer": null,
+          "model": "172",
+          "year": 2020,
+          "serial_number": "TEST123456",
+          "airframe_hours": 2000.0,
+          "engine_hours": 1800.0,
+          "propeller_hours": 1000.0,
+          "photo_url": null,
+          "description": "Test update",
+          "purpose": "Non sp\u00e9cifi\u00e9",
+          "base_city": "Non sp\u00e9cifi\u00e9",
+          "adsb_has_new_tc_items": false,
+          "count_new_adsb": 0,
+          "last_tc_adsb_version": null,
+          "last_adsb_reviewed_at": null,
+          "_id": "1769733120179849",
+          "user_id": "1769733078496887",
+          "created_at": "2026-01-30T00:32:00.179000",
+          "updated_at": "2026-01-31T13:44:04.795000"
+        }
+      ],
+      "timestamp": "2026-02-01T00:32:17.659299"
+    },
+    {
+      "test_name": "Get OCR scan AD/SB with frequency tracking for aircraft C-GTEST",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "aircraft_id": "1769733120179849",
+        "registration": "C-GTEST",
+        "items": [],
+        "total_unique_references": 0,
+        "total_ad": 0,
+        "total_sb": 0,
+        "total_recurring": 0,
+        "documents_analyzed": 0,
+        "source": "scanned_documents",
+        "disclaimer": "These references were detected by OCR from scanned maintenance documents. This is DOCUMENTARY EVIDENCE ONLY, not a compliance assessment. Verify all information with original documents and a licensed AME."
+      },
+      "timestamp": "2026-02-01T00:32:17.664324"
+    },
+    {
+      "test_name": "OCR scan AD/SB response structure validation",
+      "success": true,
+      "details": "All required fields present including total_recurring=0",
+      "response_data": null,
+      "timestamp": "2026-02-01T00:32:17.664413"
+    },
+    {
+      "test_name": "OCR scan AD/SB item frequency fields validation",
+      "success": true,
+      "details": "All 0 items have correct frequency tracking fields",
+      "response_data": null,
+      "timestamp": "2026-02-01T00:32:17.664429"
+    },
+    {
+      "test_name": "OCR scan AD/SB no duplicates validation",
+      "success": true,
+      "details": "All 0 references are unique, total_unique_references matches",
+      "response_data": null,
+      "timestamp": "2026-02-01T00:32:17.664439"
+    },
+    {
+      "test_name": "Get OCR scan AD/SB for invalid aircraft",
+      "success": true,
+      "details": "Status: 404",
+      "response_data": {
+        "detail": "Aircraft not found"
+      },
+      "timestamp": "2026-02-01T00:32:17.667934"
+    },
+    {
+      "test_name": "OCR scan AD/SB error handling validation",
+      "success": true,
+      "details": "Correct 404 response for invalid aircraft_id",
+      "response_data": null,
+      "timestamp": "2026-02-01T00:32:17.668018"
+    },
+    {
+      "test_name": "AD/SB OCR Frequency Tracking complete validation",
+      "success": true,
+      "details": "All tests passed. Items: 0, Recurring: 0, TC matched: 0, Total recurring field: 0",
+      "response_data": null,
+      "timestamp": "2026-02-01T00:32:17.668029"
+    }
+  ]
+}
