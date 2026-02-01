@@ -186,8 +186,56 @@ async def get_limitations_summary(
 
 
 # ============================================================
-# CRITICAL MENTIONS ENDPOINT - Aggregated view
+# CRITICAL MENTIONS ENDPOINT - Aggregated view with DEDUPLICATION
 # ============================================================
+
+def _normalize_limitation_text(text: str) -> str:
+    """
+    Normalize limitation text for deduplication.
+    Removes JSON artifacts, extra whitespace, and normalizes case.
+    """
+    import re
+    if not text:
+        return ""
+    
+    # Remove JSON-like patterns: "TEXT": "...", "CONFIDENCE": 0.95, etc.
+    text = re.sub(r'"[A-Z_]+"\s*:\s*(?:"[^"]*"|[\d.]+)\s*,?\s*', '', text)
+    text = re.sub(r'[\{\}\[\]]', '', text)
+    
+    # Normalize whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Remove leading/trailing punctuation
+    text = text.strip('.,;: ')
+    
+    # Take first 100 chars for comparison (to handle slight variations)
+    return text[:100].upper()
+
+
+def _deduplicate_mentions(mentions: list) -> list:
+    """
+    Deduplicate mentions by normalized text.
+    Keeps the most recent one (by report_date) for each unique text.
+    """
+    seen_texts = {}
+    
+    for mention in mentions:
+        normalized = _normalize_limitation_text(mention.get("text", ""))
+        if not normalized:
+            continue
+        
+        # If we haven't seen this text, or this one is newer, keep it
+        if normalized not in seen_texts:
+            seen_texts[normalized] = mention
+        else:
+            # Compare dates - keep newer one
+            existing_date = seen_texts[normalized].get("report_date") or ""
+            new_date = mention.get("report_date") or ""
+            if new_date > existing_date:
+                seen_texts[normalized] = mention
+    
+    return list(seen_texts.values())
+
 
 @router.get("/{aircraft_id}/critical-mentions")
 async def get_critical_mentions(
@@ -198,6 +246,8 @@ async def get_critical_mentions(
     """
     Get all critical mentions for an aircraft with report dates.
     
+    DEDUPLICATION: Removes duplicate mentions based on normalized text.
+    
     Aggregates data from:
     - operational_limitations (ELT, AVIONICS, GENERAL limitations)
     - ocr_scans.extracted_data.elt_data (ELT component data)
@@ -207,6 +257,8 @@ async def get_critical_mentions(
     - Avionics mentions (pitot/static/transponder)
     - Fire extinguisher mentions
     - Other limitations
+    
+    Each mention has an 'id' field for deletion via DELETE /api/limitations/{aircraft_id}/{id}
     
     READ-ONLY - No calculations, no status inference.
     INFORMATIONAL ONLY - Always verify with AME.
@@ -224,13 +276,11 @@ async def get_critical_mentions(
     
     registration = aircraft.get("registration")
     
-    # Initialize response structure
-    critical_mentions = {
-        "elt": [],
-        "avionics": [],
-        "fire_extinguisher": [],
-        "general_limitations": []
-    }
+    # Initialize raw lists (before deduplication)
+    raw_elt = []
+    raw_avionics = []
+    raw_fire_extinguisher = []
+    raw_general = []
     
     # ============================================================
     # 1. Get limitations by category from operational_limitations
@@ -251,13 +301,16 @@ async def get_critical_mentions(
             else:
                 report_date_str = str(doc["report_date"])
         
-        critical_mentions["elt"].append({
+        raw_elt.append({
             "id": str(doc.get("_id", "")),
             "text": doc.get("limitation_text", ""),
             "keywords": doc.get("detected_keywords", []),
             "confidence": doc.get("confidence", 0.5),
             "report_id": doc.get("report_id"),
             "report_date": report_date_str,
+            "source": "limitation_detector",
+            "can_delete": True
+        })
             "source": "limitation_detector"
         })
     
