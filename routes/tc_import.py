@@ -59,12 +59,20 @@ class ImportedReferenceItem(BaseModel):
     has_user_pdf: bool = Field(True, description="True if user uploaded PDF exists")
     can_delete: bool = Field(True, description="True - user can always delete their imports")
     can_open_pdf: bool = Field(True, description="True if PDF can be opened")
+    # ============================================================
+    # SCAN COMPARISON FIELDS (Vu / Non Vu badges)
+    # ============================================================
+    seen_in_scans: bool = Field(False, description="True if found in OCR scanned documents (badge Vu)")
+    scan_count: int = Field(0, description="Number of times seen in scanned documents")
+    last_scan_date: Optional[str] = Field(None, description="Most recent scan date where this AD/SB was seen")
 
 
 class ImportedReferencesResponse(BaseModel):
     """Response for listing imported references"""
     aircraft_id: str
     total_count: int
+    total_seen: int = Field(0, description="Count of references seen in scans (badge Vu)")
+    total_not_seen: int = Field(0, description="Count of references NOT seen in scans (badge Non Vu)")
     references: List[ImportedReferenceItem]
 
 
