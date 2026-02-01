@@ -273,7 +273,8 @@ class TCPDFImportService:
         references: List[str],
         aircraft_id: str,
         tc_pdf_id: str,
-        user_id: str
+        user_id: str,
+        title: Optional[str] = None
     ) -> int:
         """
         Create tc_imported_references documents.
