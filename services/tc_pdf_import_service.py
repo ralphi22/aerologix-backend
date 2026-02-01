@@ -364,11 +364,12 @@ class TCPDFImportService:
         
         Process:
         1. Extract text from PDF
-        2. Find valid CF-XXXX-XX references
-        3. Store PDF (tc_pdf_imports)
-        4. Create references (tc_imported_references)
-        5. Collaborative detection (notify other users)
-        6. Audit log
+        2. Extract title/subject from PDF
+        3. Find valid CF-XXXX-XX references
+        4. Store PDF (tc_pdf_imports)
+        5. Create references (tc_imported_references)
+        6. Collaborative detection (notify other users)
+        7. Audit log
         
         Returns:
             PDFImportResult with tc_pdf_id and imported_references_count
@@ -387,27 +388,39 @@ class TCPDFImportService:
                     errors=["PDF contains no extractable text"]
                 )
             
-            # Step 2: Extract valid references (STRICT CF-XXXX-XX only)
+            # Step 2: Extract title/subject from PDF
+            title = self.extract_title_from_text(text)
+            logger.info(f"[TC PDF IMPORT] Extracted title: {title}")
+            
+            # Step 3: Extract valid references (STRICT CF-XXXX-XX only)
             references = self.extract_references(text)
             
-            # Step 3: Store PDF
+            # Step 4: Store PDF (include title in the document)
             tc_pdf_id, storage_path = await self.store_pdf(
                 pdf_bytes=pdf_bytes,
                 filename=filename,
                 user_id=user_id
             )
             
-            # Step 4: Create references (if any found)
+            # Update PDF document with title
+            if title:
+                await self.db.tc_pdf_imports.update_one(
+                    {"tc_pdf_id": tc_pdf_id},
+                    {"$set": {"title": title}}
+                )
+            
+            # Step 5: Create references (if any found) - include title
             refs_created = 0
             if references:
                 refs_created = await self.create_references(
                     references=references,
                     aircraft_id=aircraft_id,
                     tc_pdf_id=tc_pdf_id,
-                    user_id=user_id
+                    user_id=user_id,
+                    title=title
                 )
             
-            # Step 5: Collaborative detection - notify other users with same aircraft type
+            # Step 6: Collaborative detection - notify other users with same aircraft type
             # Uses CANONICAL key: aircraft_type_key = manufacturer::model
             if references and refs_created > 0:
                 try:
