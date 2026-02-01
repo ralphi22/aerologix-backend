@@ -74,17 +74,17 @@ backend:
         agent: "testing"
         comment: "✅ Collaborative AD/SB Detection system fully tested and working. All alert endpoints tested successfully: (1) GET /api/alerts/adsb returns correct structure {alerts: [], total_count: 0, unread_count: 0}, (2) GET /api/alerts/adsb/count returns correct counts {unread_count: 0, total_count: 0}, (3) GET /api/alerts/adsb/global-stats returns correct statistics {total_global_references: 0, total_alerts_created: 0, top_models: [], disclaimer: 'TC-SAFE: Statistics only, no compliance inference'}, (4) Authentication works properly with test@aerologix.ca/password123, (5) Error handling for invalid alert IDs returns 400 as expected, (6) All response structures match expected format exactly. Alert management endpoints (read/dismiss) ready for when alerts exist. System is fully functional and ready for production use."
 
-  - task: "AD/SB OCR Deletion Fix"
+  - task: "AD/SB OCR Deletion Fix V2"
     implemented: true
-    working: true
-    file: "/app/routes/adsb.py"
+    working: false
+    file: "/app/backend/routes/adsb.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ AD/SB OCR deletion fix endpoints fully tested and working perfectly. All 4 test scenarios from the review request passed with 100% success rate: (1) GET /api/adsb/ocr-scan/{aircraft_id} returns correct response structure with new fields (id, reference, type, title, description, status, occurrence_count, record_ids) for each item - all field types validated correctly, (2) DELETE /api/adsb/{adsb_id} correctly returns 404 with 'detail' field when ID doesn't exist, (3) DELETE /api/adsb/ocr/{aircraft_id}/reference/{reference} correctly returns 404 with proper error message when no records found for reference 'AD 2011-10-09', (4) Response structures match expected format exactly. Authentication with test@aerologix.ca/password123 works properly. All endpoints handle error cases correctly and return appropriate HTTP status codes and response structures."
+      - working: false
+        agent: "main"
+        comment: "FIX APPLIED: Rewrote DELETE /api/adsb/ocr/{aircraft_id}/reference/{reference} endpoint. Previous implementation was deleting from adsb_records collection, but the AD/SB references from OCR are stored as embedded arrays inside ocr_scans documents (extracted_data.ad_sb_references). New implementation uses MongoDB $pull operator to remove matching elements from the embedded array. Also deletes from adsb_records as fallback for legacy data."
 
   - task: "TC Import Endpoints"
     implemented: true
