@@ -150,6 +150,18 @@ metadata:
         agent: "main"
         comment: "FIX: Added title and filename fields to ImportedReferenceItem model. Service now extracts title from PDF Subject line during import. GET /api/adsb/tc/references/{aircraft_id} now returns title and filename for display in frontend."
 
+  - task: "Critical Mentions Deduplication"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/limitations.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ Critical Mentions Deduplication fully tested and working. All 4 test scenarios from review request passed with 100% success rate: (1) GET /api/limitations/{aircraft_id}/critical-mentions returns correct structure with aircraft_id, registration, critical_mentions (elt, avionics, fire_extinguisher, general_limitations), summary with deduplication info (raw_total, duplicates_removed, total_count), and disclaimer, (2) Each mention has required fields (id, text, can_delete, source) with correct types - id and text are strings, can_delete is boolean, source is string, (3) DELETE /api/limitations/{aircraft_id}/{limitation_id} returns correct response structure {message, limitation_id} or 404 for non-existent limitations, (4) Summary includes deduplication info with proper math validation (raw_total - duplicates_removed = total_count). Authentication with test@aerologix.ca/password123 works properly. Deduplication logic removes duplicate limitations with similar text content using _normalize_limitation_text() and _deduplicate_mentions() functions. Error handling for invalid aircraft_id returns proper 404. System ready for production use with deduplication feature."
+
   - task: "AD/SB OCR Frequency Tracking"
     implemented: true
     working: true
