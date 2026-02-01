@@ -1509,6 +1509,7 @@ class OCRScanADSBResponse(BaseModel):
     total_unique_references: int = 0
     total_ad: int = 0
     total_sb: int = 0
+    total_recurring: int = 0  # Count of AD/SBs with periodic verification
     documents_analyzed: int = 0
     source: str = "scanned_documents"
     disclaimer: str = (
@@ -1516,6 +1517,146 @@ class OCRScanADSBResponse(BaseModel):
         "This is DOCUMENTARY EVIDENCE ONLY, not a compliance assessment. "
         "Verify all information with original documents and a licensed AME."
     )
+
+
+# ============================================================
+# RECURRENCE / FREQUENCY HELPER FUNCTIONS
+# ============================================================
+
+def parse_recurrence_type(raw: Optional[str]) -> tuple[str, bool]:
+    """
+    Parse raw recurrence type from TC data.
+    
+    Returns: (display_type, is_recurring)
+    
+    TC recurrence types:
+    - ONCE: One-time (non-recurring)
+    - HOURS: Based on flight hours
+    - YEARS: Based on calendar years
+    - ANNUAL: Yearly
+    - MONTHS: Based on calendar months
+    - CYCLES: Based on flight cycles
+    """
+    if not raw:
+        return ("Non spécifié", False)
+    
+    raw_upper = raw.upper().strip()
+    
+    recurrence_map = {
+        "ONCE": ("Une fois", False),
+        "ONE_TIME": ("Une fois", False),
+        "HOURS": ("Heures de vol", True),
+        "FLIGHT_HOURS": ("Heures de vol", True),
+        "YEARS": ("Années", True),
+        "ANNUAL": ("Annuel", True),
+        "ANNUALLY": ("Annuel", True),
+        "MONTHS": ("Mois", True),
+        "CYCLES": ("Cycles", True),
+        "LANDINGS": ("Atterrissages", True),
+        "CALENDAR": ("Calendrier", True),
+    }
+    
+    return recurrence_map.get(raw_upper, (raw, raw_upper != "ONCE"))
+
+
+def format_recurrence_display(recurrence_type: Optional[str], recurrence_value: Optional[int]) -> str:
+    """
+    Format recurrence for human-readable display.
+    
+    Examples:
+    - "Annuel" for annual
+    - "Tous les 5 ans" for 5 years
+    - "Toutes les 100 heures" for 100 hours
+    - "Une fois" for one-time
+    """
+    if not recurrence_type:
+        return "Non spécifié"
+    
+    type_upper = recurrence_type.upper().strip()
+    
+    if type_upper in ["ONCE", "ONE_TIME"]:
+        return "Une fois"
+    
+    if type_upper in ["ANNUAL", "ANNUALLY"]:
+        return "Annuel"
+    
+    if not recurrence_value:
+        parse_result, _ = parse_recurrence_type(recurrence_type)
+        return parse_result
+    
+    # Format with value
+    if type_upper == "YEARS":
+        if recurrence_value == 1:
+            return "Annuel"
+        return f"Tous les {recurrence_value} ans"
+    
+    if type_upper == "MONTHS":
+        if recurrence_value == 12:
+            return "Annuel"
+        return f"Tous les {recurrence_value} mois"
+    
+    if type_upper in ["HOURS", "FLIGHT_HOURS"]:
+        return f"Toutes les {recurrence_value} heures"
+    
+    if type_upper == "CYCLES":
+        return f"Tous les {recurrence_value} cycles"
+    
+    if type_upper == "LANDINGS":
+        return f"Tous les {recurrence_value} atterrissages"
+    
+    return f"{recurrence_type}: {recurrence_value}"
+
+
+def calculate_next_due_date(
+    last_seen_date: Optional[str],
+    recurrence_type: Optional[str],
+    recurrence_value: Optional[int]
+) -> tuple[Optional[str], Optional[int]]:
+    """
+    Calculate the next due date based on last compliance and recurrence.
+    
+    Returns: (next_due_date_str, days_until_due)
+    
+    Note: Only calculable for calendar-based recurrence (YEARS, MONTHS, ANNUAL).
+    Hours-based recurrence cannot be calculated without current flight hours.
+    """
+    if not last_seen_date or not recurrence_type:
+        return (None, None)
+    
+    type_upper = recurrence_type.upper().strip()
+    
+    # Only calculate for calendar-based recurrence
+    if type_upper not in ["YEARS", "MONTHS", "ANNUAL", "ANNUALLY"]:
+        return (None, None)
+    
+    try:
+        # Parse last seen date
+        last_date = datetime.strptime(last_seen_date, "%Y-%m-%d")
+        
+        # Calculate next due date
+        if type_upper in ["ANNUAL", "ANNUALLY"]:
+            next_date = last_date.replace(year=last_date.year + 1)
+        elif type_upper == "YEARS" and recurrence_value:
+            next_date = last_date.replace(year=last_date.year + recurrence_value)
+        elif type_upper == "MONTHS" and recurrence_value:
+            # Add months
+            month = last_date.month + recurrence_value
+            year = last_date.year + (month - 1) // 12
+            month = (month - 1) % 12 + 1
+            # Handle day overflow (e.g., Jan 31 + 1 month)
+            day = min(last_date.day, [31, 29 if year % 4 == 0 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
+            next_date = datetime(year, month, day)
+        else:
+            return (None, None)
+        
+        # Calculate days until due
+        today = datetime.now()
+        days_until = (next_date - today).days
+        
+        return (next_date.strftime("%Y-%m-%d"), days_until)
+        
+    except Exception:
+        return (None, None)
 
 
 def normalize_adsb_reference(ref: str) -> str:
