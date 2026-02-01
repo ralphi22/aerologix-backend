@@ -2002,24 +2002,133 @@ async def get_ocr_scan_adsb(
             if record_status and not agg["status"]:
                 agg["status"] = record_status
     
-    # Build response items
-    items = [
-        OCRScanADSBItem(
+    # ============================================================
+    # ENRICH WITH TC BASELINE DATA (recurrence/frequency tracking)
+    # ============================================================
+    # Cross-reference OCR-detected AD/SBs with TC baseline to get
+    # recurrence type, value, and calculate next due dates.
+    
+    # Build a lookup of TC AD/SB by normalized reference
+    tc_lookup: Dict[str, Dict[str, Any]] = {}
+    
+    # Get aircraft manufacturer/model for TC lookup
+    manufacturer = aircraft.get("manufacturer", "")
+    model = aircraft.get("model", "")
+    designator = aircraft.get("designator")
+    
+    # Import helper for identifier matching
+    from services.structured_adsb_service import StructuredADSBComparisonService
+    service = StructuredADSBComparisonService(db)
+    
+    # Query TC AD collection
+    async for ad in db.tc_ad.find({"is_active": True}):
+        ref = ad.get("ref", "")
+        if not ref:
+            continue
+        
+        # Check if applies to this aircraft
+        applies = False
+        if designator and ad.get("designator") == designator:
+            applies = True
+        elif service._model_matches(model, ad.get("model", "")) and \
+             manufacturer.upper() == (ad.get("manufacturer") or "").upper():
+            applies = True
+        
+        if applies:
+            norm_ref = normalize_adsb_reference(ref)
+            if norm_ref:
+                eff_date = ad.get("effective_date")
+                eff_str = eff_date.strftime("%Y-%m-%d") if hasattr(eff_date, 'strftime') else str(eff_date)[:10] if eff_date else None
+                
+                tc_lookup[norm_ref] = {
+                    "recurrence_type": ad.get("recurrence_type"),
+                    "recurrence_value": ad.get("recurrence_value"),
+                    "title": ad.get("title"),
+                    "effective_date": eff_str,
+                }
+    
+    # Query TC SB collection
+    async for sb in db.tc_sb.find({"is_active": True}):
+        ref = sb.get("ref", "")
+        if not ref:
+            continue
+        
+        applies = False
+        if designator and sb.get("designator") == designator:
+            applies = True
+        elif service._model_matches(model, sb.get("model", "")) and \
+             manufacturer.upper() == (sb.get("manufacturer") or "").upper():
+            applies = True
+        
+        if applies:
+            norm_ref = normalize_adsb_reference(ref)
+            if norm_ref:
+                eff_date = sb.get("effective_date")
+                eff_str = eff_date.strftime("%Y-%m-%d") if hasattr(eff_date, 'strftime') else str(eff_date)[:10] if eff_date else None
+                
+                tc_lookup[norm_ref] = {
+                    "recurrence_type": sb.get("recurrence_type"),
+                    "recurrence_value": sb.get("recurrence_value"),
+                    "title": sb.get("title"),
+                    "effective_date": eff_str,
+                }
+    
+    # Build response items with TC enrichment
+    items = []
+    total_recurring = 0
+    
+    for data in aggregation.values():
+        ref = data["reference"]
+        norm_ref = normalize_adsb_reference(ref)
+        
+        # Try to find TC match
+        tc_data = tc_lookup.get(norm_ref, {})
+        tc_matched = bool(tc_data)
+        
+        # Get recurrence info
+        recurrence_type = tc_data.get("recurrence_type")
+        recurrence_value = tc_data.get("recurrence_value")
+        
+        # Parse recurrence
+        _, is_recurring = parse_recurrence_type(recurrence_type)
+        recurrence_display = format_recurrence_display(recurrence_type, recurrence_value)
+        
+        # Calculate next due date (only for calendar-based recurrence)
+        next_due_date, days_until_due = calculate_next_due_date(
+            data.get("last_seen_date"),
+            recurrence_type,
+            recurrence_value
+        )
+        
+        if is_recurring:
+            total_recurring += 1
+        
+        # Use TC title if available and not already set
+        title = data.get("title") or tc_data.get("title")
+        
+        items.append(OCRScanADSBItem(
             id=data.get("id"),
             reference=data["reference"],
             type=data["type"],
-            title=data.get("title"),
-            description=data.get("description"),
+            title=title,
+            description=data.get("description") or title,
             status=data.get("status"),
             occurrence_count=data["occurrence_count"],
             source="scanned_documents",
             first_seen_date=data["first_seen_date"],
             last_seen_date=data["last_seen_date"],
             scan_ids=data["scan_ids"],
-            record_ids=data.get("record_ids", [])
-        )
-        for data in aggregation.values()
-    ]
+            record_ids=data.get("record_ids", []),
+            # Frequency tracking fields
+            recurrence_type=recurrence_type,
+            recurrence_value=recurrence_value,
+            recurrence_display=recurrence_display,
+            next_due_date=next_due_date,
+            is_recurring=is_recurring,
+            days_until_due=days_until_due,
+            tc_matched=tc_matched,
+            tc_effective_date=tc_data.get("effective_date"),
+        ))
     
     # Sort by reference for deterministic output
     items.sort(key=lambda x: x.reference)
