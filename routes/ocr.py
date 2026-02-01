@@ -1025,6 +1025,7 @@ async def apply_ocr_results(
                     "aircraft_id": aircraft_id,
                     "part_number": part_number,
                     "name": part_description or part_number or "Unknown Part",
+                    "description": part_description,  # Short description from OCR
                     "serial_number": part.get("serial_number"),
                     "quantity": part.get("quantity"),  # Can be None - user validates
                     "purchase_price": part.get("price") or part.get("unit_price"),
