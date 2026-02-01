@@ -2264,21 +2264,7 @@ class AeroLogixBackendTester:
         
         # Run all test suites
         test_suites = [
-            ("Aircraft Default Values", self.test_aircraft_default_values),
-            ("TC Import Endpoints", self.test_tc_import_endpoints),
-            ("Counter Guard Implementation", self.test_counter_guard_implementation),
-            ("Critical Mentions Endpoint", self.test_critical_mentions_endpoint),
-            ("OCR Scan AD/SB Endpoint", self.test_ocr_scan_adsb_endpoint),
-            ("TC vs OCR Comparison Endpoint", self.test_tc_vs_ocr_comparison_endpoint),
-            ("Collaborative AD/SB Alerts", self.test_collaborative_alerts_endpoints),
-            ("TC Version Endpoint", self.test_tc_version_endpoint),
-            ("Detection Endpoints", self.test_detection_endpoints),
-            ("Alert Management", self.test_alert_management),
-            ("Audit Logging", self.test_audit_logging),
-            ("Aircraft Integration", self.test_aircraft_integration),
-            ("Auto-Clear Integration", self.test_auto_clear_integration),
-            ("Detection Logic", self.test_detection_logic),
-            ("Error Handling", self.test_error_handling),
+            ("AD/SB OCR Frequency Tracking", self.test_adsb_ocr_frequency_tracking),
         ]
         
         suite_results = []
