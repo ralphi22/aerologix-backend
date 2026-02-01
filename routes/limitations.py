@@ -311,8 +311,6 @@ async def get_critical_mentions(
             "source": "limitation_detector",
             "can_delete": True
         })
-            "source": "limitation_detector"
-        })
     
     # Avionics limitations (pitot/static/transponder)
     avionics_cursor = db.operational_limitations.find({
@@ -329,14 +327,15 @@ async def get_critical_mentions(
             else:
                 report_date_str = str(doc["report_date"])
         
-        critical_mentions["avionics"].append({
+        raw_avionics.append({
             "id": str(doc.get("_id", "")),
             "text": doc.get("limitation_text", ""),
             "keywords": doc.get("detected_keywords", []),
             "confidence": doc.get("confidence", 0.5),
             "report_id": doc.get("report_id"),
             "report_date": report_date_str,
-            "source": "limitation_detector"
+            "source": "limitation_detector",
+            "can_delete": True
         })
     
     # Fire extinguisher limitations (dedicated category)
@@ -354,14 +353,15 @@ async def get_critical_mentions(
             else:
                 report_date_str = str(doc["report_date"])
         
-        critical_mentions["fire_extinguisher"].append({
+        raw_fire_extinguisher.append({
             "id": str(doc.get("_id", "")),
             "text": doc.get("limitation_text", ""),
             "keywords": doc.get("detected_keywords", []),
             "confidence": doc.get("confidence", 0.5),
             "report_id": doc.get("report_id"),
             "report_date": report_date_str,
-            "source": "limitation_detector"
+            "source": "limitation_detector",
+            "can_delete": True
         })
     
     # General limitations (other categories)
@@ -383,17 +383,18 @@ async def get_critical_mentions(
         
         # Legacy fallback: Check if this is a fire extinguisher mention (for old data)
         if "fire" in text_lower or "extinguisher" in text_lower:
-            critical_mentions["fire_extinguisher"].append({
+            raw_fire_extinguisher.append({
                 "id": str(doc.get("_id", "")),
                 "text": doc.get("limitation_text", ""),
                 "keywords": doc.get("detected_keywords", []),
                 "confidence": doc.get("confidence", 0.5),
                 "report_id": doc.get("report_id"),
                 "report_date": report_date_str,
-                "source": "limitation_detector"
+                "source": "limitation_detector",
+                "can_delete": True
             })
         else:
-            critical_mentions["general_limitations"].append({
+            raw_general.append({
                 "id": str(doc.get("_id", "")),
                 "text": doc.get("limitation_text", ""),
                 "keywords": doc.get("detected_keywords", []),
@@ -401,7 +402,8 @@ async def get_critical_mentions(
                 "report_id": doc.get("report_id"),
                 "report_date": report_date_str,
                 "category": doc.get("category", "GENERAL"),
-                "source": "limitation_detector"
+                "source": "limitation_detector",
+                "can_delete": True
             })
     
     # ============================================================
