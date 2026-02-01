@@ -173,13 +173,27 @@ async def list_imported_references(
         tc_pdf_id = doc.get("tc_pdf_id", "")
         has_pdf = bool(tc_pdf_id)
         
-        # Check if PDF file actually exists
+        # Get title and filename from reference doc
+        title = doc.get("title")
+        filename = None
+        
+        # Check if PDF file actually exists and get filename
         can_open = False
         if has_pdf:
             pdf_doc = await db.tc_pdf_imports.find_one({"tc_pdf_id": tc_pdf_id})
             if pdf_doc:
                 storage_path = pdf_doc.get("storage_path")
                 can_open = storage_path and os.path.exists(storage_path)
+                filename = pdf_doc.get("filename")
+                # Use PDF title if reference doesn't have one
+                if not title:
+                    title = pdf_doc.get("title")
+        
+        # Build a default title if none exists
+        if not title:
+            identifier = doc.get("identifier", "")
+            doc_type = doc.get("type", "AD")
+            title = f"{doc_type} {identifier}"
         
         references.append(ImportedReferenceItem(
             tc_reference_id=str(doc["_id"]),  # ObjectId → string
@@ -188,6 +202,9 @@ async def list_imported_references(
             tc_pdf_id=tc_pdf_id,  # UUID
             pdf_available=has_pdf,
             created_at=created_at_str,
+            # DISPLAY FIELDS
+            title=title,
+            filename=filename,
             # EXPLICIT FLAGS
             has_user_pdf=has_pdf,
             can_delete=True,  # User can ALWAYS delete their imports
