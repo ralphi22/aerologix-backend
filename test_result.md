@@ -120,6 +120,18 @@ metadata:
   test_sequence: 1
   run_ui: false
 
+  - task: "TC AD/SB Scan Comparison Badges"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/tc_import.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TC AD/SB Scan Comparison fully tested. All scenarios passed: (1) Response includes new fields total_seen, total_not_seen, (2) Each reference has seen_in_scans (bool), scan_count (int), last_scan_date (string/null), (3) Consistency verified: total_seen + total_not_seen == total_count. Ready for frontend badge display."
+
   - task: "TC PDF Import - Title Display Fix"
     implemented: true
     working: true
