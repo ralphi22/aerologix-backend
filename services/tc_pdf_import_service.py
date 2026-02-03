@@ -1,7 +1,7 @@
 """
 TC PDF Import Service (V3)
 
-Extracts TC AD references from Transport Canada PDF documents.
+Extracts AD/SB references from Transport Canada PDF documents.
 Uses dedicated collections: tc_pdf_imports and tc_imported_references.
 
 TC-SAFE:
@@ -9,10 +9,11 @@ TC-SAFE:
 - Source tracking for traceability
 - Audit trail for all imports
 
-STRICT EXTRACTION:
-- Only CF-XXXX-XX pattern (^CF-\d{4}-\d{2,4}$)
-- Normalized: trim, uppercase, no spaces
-- Duplicates prevented by aircraft_id + identifier + tc_pdf_id
+SUPPORTED FORMATS:
+- Canada (CF): CF-2024-01, CF-1987-15R4
+- US (FAA): 2022-03-15, 83-17-06, 80-11-04R3
+- EU (EASA): 2009-0278, 2008-0183-E
+- France (DGAC): F-2005-023, F-2001-139R1
 """
 
 import re
@@ -29,12 +30,23 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# CONSTANTS
+# CONSTANTS - INTERNATIONAL AD PATTERNS
 # ============================================================
 
-# STRICT pattern for TC AD references: CF-YYYY-NN or CF-YYYY-NNN or CF-YYYY-NNNN
-TC_AD_PATTERN = re.compile(r'CF[-\s]?\d{4}[-\s]?\d{2,4}', re.IGNORECASE)
-TC_AD_STRICT_PATTERN = re.compile(r'^CF-\d{4}-\d{2,4}$')
+# Canadian format: CF-YYYY-NN (with optional revision R#)
+PATTERN_CANADA = re.compile(r'CF[-\s]?\d{2,4}[-\s]?\d{2,4}(?:R\d+)?', re.IGNORECASE)
+
+# US FAA format: YY-NN-NN or YYYY-NN-NN (with optional revision R#)
+# Examples: 83-17-06, 80-11-04R3, 2022-03-15
+PATTERN_US = re.compile(r'\b(\d{2,4})[-\s](\d{2})[-\s](\d{2})(?:R\d+)?\b')
+
+# EU EASA format: YYYY-NNNN (with optional -E suffix)
+# Examples: 2009-0278, 2008-0183-E
+PATTERN_EU = re.compile(r'\b20\d{2}[-\s]?\d{4}(?:-?E)?\b')
+
+# France DGAC format: F-YYYY-NNN (with optional R#)
+# Examples: F-2005-023, F-2001-139R1
+PATTERN_FRANCE = re.compile(r'F[-\s]?\d{4}[-\s]?\d{3,4}(?:R\d+)?', re.IGNORECASE)
 
 
 # ============================================================
