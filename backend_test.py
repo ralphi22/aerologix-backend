@@ -3263,9 +3263,7 @@ class AeroLogixBackendTester:
         
         # Run all test suites
         test_suites = [
-            ("TC PDF Import - Title Display Fix", self.test_tc_pdf_import_title_display_fix),
-            ("AD/SB OCR Frequency Tracking", self.test_adsb_ocr_frequency_tracking),
-            ("TC AD/SB Scan Comparison (Vu/Non Vu Badges)", self.test_tc_adsb_scan_comparison),
+            ("International AD References Import", self.test_international_ad_references_import),
         ]
         
         suite_results = []
