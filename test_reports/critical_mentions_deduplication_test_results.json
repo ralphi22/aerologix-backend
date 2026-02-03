@@ -3,7 +3,7 @@
     "total_tests": 9,
     "passed_tests": 9,
     "success_rate": 100.0,
-    "timestamp": "2026-02-01T05:08:17.704717",
+    "timestamp": "2026-02-03T23:32:49.066931",
     "test_focus": "Critical Mentions Deduplication"
   },
   "detailed_results": [
@@ -12,7 +12,7 @@
       "success": true,
       "details": "Status: 200",
       "response_data": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNTI3Mjk3fQ.tp3EE-ju10sP7oyP4Y-gB0dDCN4lUx1frOqfDMjjTuY",
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzY5NzMzMDc4NDk2ODg3IiwiZXhwIjoxNzcwNzY2MzY4fQ.A3hEm9dzyDUoiWyuEY36wdPz4v2X5wgJVyWUMXGqLWo",
         "token_type": "bearer",
         "user": {
           "email": "test@aerologix.ca",
@@ -42,7 +42,7 @@
           }
         }
       },
-      "timestamp": "2026-02-01T05:08:17.680462"
+      "timestamp": "2026-02-03T23:32:49.018847"
     },
     {
       "test_name": "Get aircraft list",
@@ -73,7 +73,7 @@
           "updated_at": "2026-01-31T13:44:04.795000"
         }
       ],
-      "timestamp": "2026-02-01T05:08:17.688834"
+      "timestamp": "2026-02-03T23:32:49.039902"
     },
     {
       "test_name": "Get critical mentions for aircraft C-GTEST",
@@ -99,21 +99,21 @@
         },
         "disclaimer": "INFORMATIONAL ONLY - Always verify with AME and official records"
       },
-      "timestamp": "2026-02-01T05:08:17.695875"
+      "timestamp": "2026-02-03T23:32:49.056638"
     },
     {
       "test_name": "Critical mentions item structure validation",
       "success": true,
       "details": "All 0 mentions have required fields with correct types",
       "response_data": null,
-      "timestamp": "2026-02-01T05:08:17.695983"
+      "timestamp": "2026-02-03T23:32:49.056745"
     },
     {
       "test_name": "DELETE limitation endpoint",
       "success": true,
       "details": "No deletable mentions available for testing (expected for clean system)",
       "response_data": null,
-      "timestamp": "2026-02-01T05:08:17.695994"
+      "timestamp": "2026-02-03T23:32:49.056754"
     },
     {
       "test_name": "Delete invalid limitation",
@@ -122,14 +122,14 @@
       "response_data": {
         "detail": "Limitation not found"
       },
-      "timestamp": "2026-02-01T05:08:17.700578"
+      "timestamp": "2026-02-03T23:32:49.062760"
     },
     {
       "test_name": "Deduplication summary validation",
       "success": true,
       "details": "Deduplication working correctly. Raw: 0, Final: 0, Duplicates removed: 0",
       "response_data": null,
-      "timestamp": "2026-02-01T05:08:17.700675"
+      "timestamp": "2026-02-03T23:32:49.062865"
     },
     {
       "test_name": "Get critical mentions for invalid aircraft",
@@ -138,14 +138,14 @@
       "response_data": {
         "detail": "Aircraft not found"
       },
-      "timestamp": "2026-02-01T05:08:17.704489"
+      "timestamp": "2026-02-03T23:32:49.066714"
     },
     {
       "test_name": "Critical mentions deduplication complete",
       "success": true,
       "details": "All 4 test scenarios passed. Structure validated, 0 mentions with can_delete fields, DELETE endpoint working, deduplication summary correct",
       "response_data": null,
-      "timestamp": "2026-02-01T05:08:17.704578"
+      "timestamp": "2026-02-03T23:32:49.066801"
     }
   ]
 }
