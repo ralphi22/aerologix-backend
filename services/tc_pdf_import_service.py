@@ -144,18 +144,39 @@ class TCPDFImportService:
         return None
     
     # --------------------------------------------------------
-    # REFERENCE EXTRACTION - STRICT CF-XXXX-XX ONLY
+    # REFERENCE EXTRACTION - INTERNATIONAL AD FORMATS
     # --------------------------------------------------------
+    
+    def detect_reference_type(self, ref: str) -> str:
+        """
+        Detect the type of AD reference.
+        
+        Returns: "CF" | "US" | "EU" | "FR" | "UNKNOWN"
+        """
+        ref_upper = ref.upper().strip()
+        
+        if ref_upper.startswith('CF'):
+            return "CF"
+        if ref_upper.startswith('F-') or ref_upper.startswith('F '):
+            return "FR"
+        # EU format: 20XX-NNNN
+        if re.match(r'^20\d{2}[-\s]?\d{4}', ref_upper):
+            return "EU"
+        # US format: YY-NN-NN or YYYY-NN-NN
+        if re.match(r'^\d{2,4}[-\s]\d{2}[-\s]\d{2}', ref_upper):
+            return "US"
+        
+        return "UNKNOWN"
     
     def normalize_reference(self, raw_ref: str) -> Optional[str]:
         """
-        Normalize a reference to CF-YYYY-NN format.
+        Normalize an AD reference to standard format.
         
-        Steps:
-        1. Trim whitespace
-        2. Uppercase
-        3. Remove internal spaces
-        4. Ensure CF-YYYY-NN format with hyphens
+        Supports:
+        - Canada: CF-YYYY-NN → CF-YYYY-NN
+        - US: YY-NN-NN → YY-NN-NN
+        - EU: YYYY-NNNN → YYYY-NNNN
+        - France: F-YYYY-NNN → F-YYYY-NNN
         
         Returns:
             Normalized reference or None if invalid
@@ -163,51 +184,100 @@ class TCPDFImportService:
         if not raw_ref:
             return None
         
-        # Step 1: Trim
-        ref = raw_ref.strip()
+        # Clean up
+        ref = raw_ref.strip().upper()
         
-        # Step 2: Uppercase
-        ref = ref.upper()
+        # Canadian format: CF-YYYY-NN
+        if ref.startswith('CF'):
+            ref = ref.replace(' ', '')
+            match = re.match(r'^CF-?(\d{2,4})-?(\d{2,4})(R\d+)?$', ref)
+            if match:
+                year = match.group(1)
+                num = match.group(2)
+                rev = match.group(3) or ""
+                return f"CF-{year}-{num}{rev}"
         
-        # Step 3: Remove spaces
-        ref = ref.replace(" ", "")
+        # France format: F-YYYY-NNN
+        if ref.startswith('F'):
+            ref = ref.replace(' ', '')
+            match = re.match(r'^F-?(\d{4})-?(\d{3,4})(R\d+)?$', ref)
+            if match:
+                year = match.group(1)
+                num = match.group(2)
+                rev = match.group(3) or ""
+                return f"F-{year}-{num}{rev}"
         
-        # Step 4: Normalize separators to hyphens
-        # Handle cases like "CF2024-01" or "CF-202401"
-        ref = re.sub(r'[-\s]+', '-', ref)
-        
-        # Ensure format: CF-YYYY-NN
-        # Try to fix common variations
-        match = re.match(r'^CF-?(\d{4})-?(\d{2,4})$', ref)
+        # EU format: YYYY-NNNN
+        match = re.match(r'^(20\d{2})-?(\d{4})(-?E)?$', ref)
         if match:
             year = match.group(1)
             num = match.group(2)
-            normalized = f"CF-{year}-{num}"
-            
-            # Final validation against strict pattern
-            if TC_AD_STRICT_PATTERN.match(normalized):
-                return normalized
+            suffix = match.group(3) or ""
+            return f"{year}-{num}{suffix}"
+        
+        # US format: YY-NN-NN or YYYY-NN-NN
+        ref_clean = re.sub(r'[\s]+', '-', ref)
+        match = re.match(r'^(\d{2,4})-(\d{2})-(\d{2})(R\d+)?$', ref_clean)
+        if match:
+            year = match.group(1)
+            mid = match.group(2)
+            num = match.group(3)
+            rev = match.group(4) or ""
+            return f"{year}-{mid}-{num}{rev}"
         
         return None
     
     def extract_references(self, text: str) -> List[str]:
         """
-        Extract valid TC AD references from text.
+        Extract all valid AD references from text.
         
-        STRICT: Only CF-YYYY-NN pattern (^CF-\d{4}-\d{2,4}$)
+        Supports multiple international formats:
+        - Canada: CF-YYYY-NN
+        - US: YY-NN-NN, YYYY-NN-NN
+        - EU: YYYY-NNNN
+        - France: F-YYYY-NNN
         
         Returns:
             List of normalized, unique, valid references
         """
-        # Find all potential matches
-        raw_matches = TC_AD_PATTERN.findall(text)
-        
-        # Normalize and filter
         valid_refs = set()
-        for raw in raw_matches:
-            normalized = self.normalize_reference(raw)
+        
+        # Extract Canadian references
+        for match in PATTERN_CANADA.findall(text):
+            normalized = self.normalize_reference(match)
             if normalized:
                 valid_refs.add(normalized)
+        
+        # Extract French references
+        for match in PATTERN_FRANCE.findall(text):
+            normalized = self.normalize_reference(match)
+            if normalized:
+                valid_refs.add(normalized)
+        
+        # Extract EU references
+        for match in PATTERN_EU.findall(text):
+            normalized = self.normalize_reference(match)
+            if normalized:
+                valid_refs.add(normalized)
+        
+        # Extract US references (YY-NN-NN format)
+        for match in PATTERN_US.findall(text):
+            if isinstance(match, tuple):
+                raw = '-'.join(match)
+            else:
+                raw = match
+            normalized = self.normalize_reference(raw)
+            if normalized:
+                # Filter out false positives (dates, etc.)
+                # US AD years are typically 60-99 or 2000+
+                year_str = normalized.split('-')[0]
+                try:
+                    year = int(year_str)
+                    # Valid US AD years: 60-99 or 2000-2030
+                    if (60 <= year <= 99) or (2000 <= year <= 2030):
+                        valid_refs.add(normalized)
+                except:
+                    pass
         
         result = sorted(valid_refs)
         logger.info(f"[TC PDF IMPORT] Extracted {len(result)} valid CF-xxxx references from {len(raw_matches)} candidates")
