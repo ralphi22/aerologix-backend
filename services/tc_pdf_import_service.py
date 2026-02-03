@@ -280,7 +280,14 @@ class TCPDFImportService:
                     pass
         
         result = sorted(valid_refs)
-        logger.info(f"[TC PDF IMPORT] Extracted {len(result)} valid CF-xxxx references from {len(raw_matches)} candidates")
+        
+        # Count by type for logging
+        cf_count = len([r for r in result if r.startswith('CF')])
+        fr_count = len([r for r in result if r.startswith('F-')])
+        us_count = len([r for r in result if re.match(r'^\d{2,4}-\d{2}-\d{2}', r)])
+        eu_count = len([r for r in result if re.match(r'^20\d{2}-\d{4}', r)])
+        
+        logger.info(f"[TC PDF IMPORT] Extracted {len(result)} references: CF={cf_count}, US={us_count}, EU={eu_count}, FR={fr_count}")
         
         return result
     
