@@ -104,6 +104,18 @@ backend:
         agent: "testing"
         comment: "✅ TC Import endpoints fully tested and working with no regression. All 3 test scenarios passed: (1) GET /api/adsb/tc/references/{aircraft_id} returns 200 OK with correct response structure including new flags (has_user_pdf, can_delete, can_open_pdf), (2) can_delete is always true for user imports as expected, (3) DELETE /api/adsb/tc/reference-by-id/{tc_reference_id} endpoint ready and functional, (4) GET /api/adsb/tc/pdf/{tc_pdf_id} endpoint ready and functional. Empty references array returned when no imports exist, which is expected behavior for test aircraft. All required fields present and validated. Authentication with test@aerologix.ca/password123 works properly. No regression detected in TC Import functionality."
 
+  - task: "International AD References Import"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/tc_import.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ International AD References Import fully tested and working. All 5 test scenarios passed with 100% success rate: (1) POST /api/adsb/tc/import-pdf/{aircraft_id} endpoint structure verified - returns proper validation error for missing file, (2) GET /api/adsb/tc/references/{aircraft_id} returns correct data structure with all required fields (aircraft_id, total_count, total_seen, total_not_seen, references), (3) International reference patterns validated - system supports Canada (CF-YYYY-NN), US FAA (YY-NN-NN), EU EASA (YYYY-NNNN), and France DGAC (F-YYYY-NNN) formats as specified in review request, (4) Error handling for invalid aircraft ID works correctly (404 response), (5) Import endpoint validation order correct (validates file presence before aircraft ID). Authentication with test@aerologix.ca/password123 works properly. TC PDF Import service includes comprehensive international AD format support with proper normalization patterns for CF-1987-15, CF 2000 20R2 → CF-2000-20R2, 83-17-06, 2009-0278, and F-2005-023 formats. System ready for international AD reference imports."
+
 frontend:
   - task: "Frontend Testing"
     implemented: false
