@@ -276,7 +276,7 @@ class TCPDFImportService:
                     # Valid US AD years: 60-99 or 2000-2030
                     if (60 <= year <= 99) or (2000 <= year <= 2030):
                         valid_refs.add(normalized)
-                except:
+                except ValueError:
                     pass
         
         result = sorted(valid_refs)
