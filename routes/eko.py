@@ -24,8 +24,8 @@ load_dotenv()
 router = APIRouter(prefix="/api/eko", tags=["eko"])
 logger = logging.getLogger(__name__)
 
-# Emergent LLM Key for OpenAI integration
-EMERGENT_LLM_KEY = os.getenv("EMERGENT_LLM_KEY")
+# LLM Key - Try EMERGENT_LLM_KEY first, fallback to OPENAI_API_KEY
+EMERGENT_LLM_KEY = os.getenv("EMERGENT_LLM_KEY") or os.getenv("OPENAI_API_KEY")
 
 # Rate limiting: 10 requests per minute per user
 RATE_LIMIT_REQUESTS = 10
