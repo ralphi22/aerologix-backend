@@ -23,7 +23,7 @@ class AircraftBase(BaseModel):
     
     # TC-sourced fields (from Transport Canada lookup)
     purpose: Optional[str] = None  # Purpose of registration (e.g., "Privé", "Commercial")
-    base_city: Optional[str] = None  # City / Airport (e.g., "Joliette, CSG3")
+    city_airport: Optional[str] = None  # City / Airport (e.g., "Joliette", "Goose Bay")
     
     # TC AD/SB Alert Fields (informational only)
     adsb_has_new_tc_items: bool = False
@@ -48,7 +48,7 @@ class AircraftUpdate(BaseModel):
     description: Optional[str] = None
     # TC-sourced fields
     purpose: Optional[str] = None
-    base_city: Optional[str] = None
+    city_airport: Optional[str] = None
 
 class Aircraft(AircraftBase):
     id: str = Field(alias="_id")
