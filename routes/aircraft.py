@@ -21,7 +21,7 @@ def apply_default_values(aircraft_doc: dict) -> dict:
     """
     Apply default values for TC fields if they are null or missing.
     
-    Ensures purpose and base_city are ALWAYS present in the response.
+    Ensures purpose and city_airport are ALWAYS present in the response.
     """
     if aircraft_doc is None:
         return aircraft_doc
