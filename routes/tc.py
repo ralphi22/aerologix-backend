@@ -142,7 +142,7 @@ class TCLookupResponse(BaseModel):
     
     # Location/Operations
     base_province: Optional[str] = None
-    base_city: Optional[str] = None
+    city_airport: Optional[str] = None
     
     # Owner info
     owner_name: Optional[str] = None
