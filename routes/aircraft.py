@@ -304,7 +304,7 @@ async def sync_tc_data(
     """
     Synchronize aircraft data with Transport Canada database.
     
-    Updates purpose, base_city, and other TC fields if available.
+    Updates purpose, city_airport, and other TC fields if available.
     This does NOT overwrite user-entered data unless specified.
     """
     # Check if aircraft exists and belongs to user
