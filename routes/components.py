@@ -29,26 +29,26 @@ from database.mongodb import get_database
 router = APIRouter(prefix="/api/components", tags=["components"])
 logger = logging.getLogger(__name__)
 
-# DEFAULT_SETTINGS - All values start as None/empty for new accounts
-# User must explicitly set their component values
+# DEFAULT_SETTINGS - Industry standard default values
+# These provide sensible starting points for common aircraft
 DEFAULT_SETTINGS = {
     "engine_model": None,
-    "engine_tbo_hours": None,  # User must set their engine TBO
+    "engine_tbo_hours": 2000.0,  # Typical TBO for Lycoming/Continental
     "engine_last_overhaul_hours": None,
     "engine_last_overhaul_date": None,
-    "propeller_type": None,  # User must select fixed/variable
+    "propeller_type": "fixed",  # Most common for light aircraft
     "propeller_model": None,
     "propeller_manufacturer_interval_years": None,
     "propeller_last_inspection_hours": None,
     "propeller_last_inspection_date": None,
     "avionics_last_certification_date": None,
-    "avionics_certification_interval_months": None,  # User must set (typically 24)
+    "avionics_certification_interval_months": 24,  # Canada requirement
     "magnetos_model": None,
-    "magnetos_interval_hours": None,  # User must set their interval
+    "magnetos_interval_hours": 500.0,  # Typical interval
     "magnetos_last_inspection_hours": None,
     "magnetos_last_inspection_date": None,
     "vacuum_pump_model": None,
-    "vacuum_pump_interval_hours": None,  # User must set their interval
+    "vacuum_pump_interval_hours": 400.0,  # Typical interval
     "vacuum_pump_last_replacement_hours": None,
     "vacuum_pump_last_replacement_date": None,
     "airframe_last_annual_date": None,
