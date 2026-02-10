@@ -67,6 +67,10 @@ async def fetch_tc_data(db, registration: str) -> dict:
         tc_doc = await db.tc_aircraft.find_one({"registration_norm": reg_norm})
         
         if not tc_doc:
+            # Try with registration field directly
+            tc_doc = await db.tc_aircraft.find_one({"registration": registration.upper()})
+        
+        if not tc_doc:
             # Try alternative field names (French)
             tc_doc = await db.tc_aircraft.find_one({"immatriculation": reg_norm})
         
@@ -74,7 +78,10 @@ async def fetch_tc_data(db, registration: str) -> dict:
             logger.info(f"[TC LOOKUP] No TC data found for {reg_norm}")
             return {}
         
-        # Map French fields to English
+        # Log what we found for debugging
+        logger.info(f"[TC LOOKUP] Found document for {reg_norm}: purpose={tc_doc.get('purpose')}, city_airport={tc_doc.get('city_airport')}")
+        
+        # Map fields - check English names FIRST, then French fallbacks
         def get_field(*keys):
             for key in keys:
                 if key in tc_doc and tc_doc[key]:
@@ -82,15 +89,16 @@ async def fetch_tc_data(db, registration: str) -> dict:
             return None
         
         result = {
-            "purpose": get_field("but", "purpose"),
-            "base_city": get_field("aéroport de la ville", "city_airport"),
-            "manufacturer": get_field("constructeur", "manufacturer"),
-            "model": get_field("modèle", "model"),
-            "serial_number": get_field("numéro_de_série", "serial_number"),
-            "year": get_field("date_fabrication", "year"),
+            # English first, French fallback
+            "purpose": get_field("purpose", "but"),
+            "base_city": get_field("city_airport", "aéroport de la ville"),
+            "manufacturer": get_field("manufacturer", "constructeur"),
+            "model": get_field("model", "modèle"),
+            "serial_number": get_field("serial_number", "numéro_de_série"),
+            "year": get_field("date_manufacture", "date_fabrication", "year"),
         }
         
-        logger.info(f"[TC LOOKUP] Found TC data for {reg_norm}: purpose={result.get('purpose')}, base_city={result.get('base_city')}")
+        logger.info(f"[TC LOOKUP] Mapped TC data for {reg_norm}: purpose={result.get('purpose')}, base_city={result.get('base_city')}")
         
         return {k: v for k, v in result.items() if v is not None}
         
