@@ -91,7 +91,7 @@ def map_tc_aircraft(doc: dict) -> dict:
         
         # Location/Operations
         "base_province": get_field("province_de_base", "base_province"),
-        "base_city": get_field("aéroport de la ville", "city_airport"),
+        "city_airport": get_field("city_airport", "aéroport de la ville"),
         
         # Owner info (public record only)
         "owner_name": get_field("nom_du_propriétaire", "owner_name"),
