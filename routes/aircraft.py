@@ -98,7 +98,7 @@ async def fetch_tc_data(db, registration: str) -> dict:
             "year": get_field("date_manufacture", "date_fabrication", "year"),
         }
         
-        logger.info(f"[TC LOOKUP] Mapped TC data for {reg_norm}: purpose={result.get('purpose')}, base_city={result.get('base_city')}")
+        logger.info(f"[TC LOOKUP] Mapped TC data for {reg_norm}: purpose={result.get('purpose')}, city_airport={result.get('city_airport')}")
         
         return {k: v for k, v in result.items() if v is not None}
         
