@@ -91,7 +91,7 @@ async def fetch_tc_data(db, registration: str) -> dict:
         result = {
             # English first, French fallback
             "purpose": get_field("purpose", "but"),
-            "base_city": get_field("city_airport", "aéroport de la ville"),
+            "city_airport": get_field("city_airport", "aéroport de la ville"),
             "manufacturer": get_field("manufacturer", "constructeur"),
             "model": get_field("model", "modèle"),
             "serial_number": get_field("serial_number", "numéro_de_série"),
