@@ -30,9 +30,9 @@ def apply_default_values(aircraft_doc: dict) -> dict:
     if not aircraft_doc.get("purpose"):
         aircraft_doc["purpose"] = DEFAULT_PURPOSE
     
-    # Ensure base_city has a value
-    if not aircraft_doc.get("base_city"):
-        aircraft_doc["base_city"] = DEFAULT_BASE_CITY
+    # Ensure city_airport has a value
+    if not aircraft_doc.get("city_airport"):
+        aircraft_doc["city_airport"] = DEFAULT_BASE_CITY
     
     return aircraft_doc
 
