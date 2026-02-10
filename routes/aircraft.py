@@ -58,7 +58,7 @@ async def fetch_tc_data(db, registration: str) -> dict:
     """
     Fetch TC data for a registration.
     
-    Returns dict with purpose and base_city from TC database.
+    Returns dict with purpose and city_airport from TC database.
     """
     try:
         reg_norm = normalize_registration_for_tc(registration)
