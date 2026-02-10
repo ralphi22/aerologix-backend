@@ -346,10 +346,10 @@ async def sync_tc_data(
         update_data["purpose"] = tc_data["purpose"]
         fields_updated.append("purpose")
     
-    # base_city
-    if tc_data.get("base_city") and not aircraft.get("base_city"):
-        update_data["base_city"] = tc_data["base_city"]
-        fields_updated.append("base_city")
+    # city_airport
+    if tc_data.get("city_airport") and not aircraft.get("city_airport"):
+        update_data["city_airport"] = tc_data["city_airport"]
+        fields_updated.append("city_airport")
     
     # manufacturer
     if tc_data.get("manufacturer") and not aircraft.get("manufacturer"):
