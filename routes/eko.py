@@ -299,36 +299,31 @@ async def chat_with_eko(
     })
     
     try:
-        # Call OpenAI via Emergent Integrations
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        # Call OpenAI directly (same as OCR service)
+        from openai import OpenAI
         
-        # Create a unique session ID for this conversation
-        session_id = f"eko_{current_user.id}_{generate_id()}"
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if not openai_key:
+            logger.error("OPENAI_API_KEY not configured")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="EKO n'est pas configuré correctement"
+            )
         
-        # Build the full system message with any context
-        full_system = EKO_SYSTEM_PROMPT
-        if request.aircraft_context:
-            full_system += f"\n\n[Contexte utilisateur: L'utilisateur consulte actuellement l'aéronef {request.aircraft_context} dans AeroLogix AI]"
-        
-        # Create chat instance with history
-        initial_messages = []
-        for msg in request.conversation_history[-10:]:
-            initial_messages.append({
-                "role": msg.role,
-                "content": msg.content
-            })
-        
-        chat_instance = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=session_id,
-            system_message=full_system,
-            initial_messages=initial_messages if initial_messages else None
+        client = OpenAI(
+            api_key=openai_key,
+            timeout=60.0
         )
         
-        # Send user message and get response
-        assistant_message = await chat_instance.send_message(
-            UserMessage(text=request.message)
+        # Call ChatCompletion API
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Or gpt-4o for better quality
+            messages=messages,
+            max_tokens=1500,
+            temperature=0.7
         )
+        
+        assistant_message = response.choices[0].message.content
         
         # Log the conversation
         conversation_id = generate_id()
